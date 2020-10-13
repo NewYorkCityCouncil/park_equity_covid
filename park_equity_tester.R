@@ -3,6 +3,7 @@
 library(leaflet)
 library(sf)
 library(censusapi)
+library(rgeos)
 
 rm(list=ls())
 
@@ -19,10 +20,18 @@ map_access <- leaflet() %>%
   addCircles(data=access)
 map_access
 
+map_walk <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=shape, weight=1)
+map_walk
+
 # Income Data
 
 ct <- read_sf("2010 Census Tracts/geo_export_8d38b305-5fed-49a0-a548-46435c11e818.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
+
+ct$center <- st_centroid(ct$geometry, of_largest_polygon = TRUE)
 
 income_col <- c("NAME", "GEO_ID", paste0("S1901_C01_0",formatC(1:13, width = 2, flag = "0"), "E")) 
 
@@ -46,6 +55,7 @@ acs5_sub_tract$boro_ct201 <- paste0(acs5_sub_tract$boro_code, acs5_sub_tract$tra
 ct_income <- st_sf(merge(acs5_sub_tract, ct, by="boro_ct201"))
 ct_income$S1901_C01_012E <- ifelse(ct_income$S1901_C01_012E<=0, NA, ct_income$S1901_C01_012E)
 
+# Income and Within 10-min Walk Overlay
 map_income <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
@@ -53,7 +63,14 @@ map_income <- leaflet() %>%
               weight = 1,
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = ct_income$S1901_C01_012E)(ct_income$S1901_C01_012E),
-              fillOpacity = 0.5)
+              fillOpacity = 0.5,
+              group = "Income") %>%
+  addPolygons(data=shape, weight=1, group= "Walk") %>%
+#  addCircles(data=ct_income$center, group= "Center") %>%
+  addCircles(data=access, group= "Access", color="red") %>%
+  addLayersControl(
+    overlayGroups = c("Walk", "Income", "Access"),
+    options = layersControlOptions(collapsed = FALSE))
 map_income
 
 
