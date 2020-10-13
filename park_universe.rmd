@@ -1,0 +1,146 @@
+---
+title: "Park Universe"
+author: "NYC Council Data Team"
+date: "`r councildown::pretty_date()`"
+fontsize: 11pt
+output:
+  html_document:
+    theme: cosmo
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(councildown)
+library(kableExtra)
+library(knitr)
+library(dplyr)
+library(DT)
+library(sf)
+library(leaflet)
+library(leaflet.extras2)
+
+extrafont::loadfonts()
+knitr::knit_hooks$set(embed = hook_pdfembed)
+knitr::opts_chunk$set(echo = FALSE, embed = TRUE)
+knitr::opts_knit$set(root.dir = here::here())
+options(scipen = 999)
+
+source(here::here( "test.R"))
+
+```
+
+## Two Main Sources
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
+# map of full universe -------------
+
+leaflet() %>%
+  # default settings ---------------
+  setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>% 
+  # shapefiles -----------
+  addPolygons(data = wpaas, fillColor = "red", dashArray = "4",
+              color = "red", popup = wpaas$name, weight = 3,
+              group = "Waterfront") %>% 
+  addPolygons(data = wpaas_fp, fillOpacity = 1, fillColor = "red",   
+              stroke = F, popup = wpaas_fp$sign_name,
+              group = "Waterfront") %>% 
+  addPolygons(data = public_wf, fillColor = "blue" , 
+              color = "blue", popup = public_wf$name,
+              group = "Waterfront") %>% 
+  addPolygons(data = rj, fillColor = "green" , 
+              color = "green", popup = rj$park_name,
+              group = "Open Spaces & Parks") %>% 
+  addCircleMarkers(data = wpaas_access, fillColor = "yellow" , 
+                   weight = 1, fillOpacity = 1, opacity = 1,
+                   popup =  paste(wpaas_access$wpaa_name, 
+                                  wpaas_access$intersect),
+                   color = "purple", radius = 4,
+                   group = "Waterfront") %>% 
+  addCircleMarkers(data = fish, fillColor = "orange" , weight = 1, 
+                   color = "orange", fillOpacity = 1, radius = 4, 
+                   popup = fish$site,
+                   group = "Waterfront") %>% 
+  addCircleMarkers(data = paws, fillColor = "blue" , weight = 1, 
+                   fillOpacity = 1, radius = 4, popup = paws$name,
+                   group = "Waterfront") %>%
+  # layers selection ----------
+  addLayersControl(
+    overlayGroups = c("Waterfront", "Open Spaces & Parks"),
+    options = layersControlOptions(collapsed = F)) %>% 
+  # legend --------
+  addLegend(opacity = 0.7, group = "Waterfront",
+            colors = c("red", "yellow", "blue", "orange"),
+            labels = c("Public Access Areas", 
+                       "Entry Points", "Publicly Owned", 
+                       "Fisheries"),
+            title = "Waterfront Sub-legend",
+            position = "bottomright") %>% 
+  addLegend(opacity = 0.7, colors = c("green", "blue"),
+            labels = c("Open Spaces & Parks", "Waterfronts"),
+            title = "Sources",
+            position = "bottomright")
+
+```
+
+## Open Space vs Park Properties Shapefile
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
+# map comparing open space & park properties -------------
+
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>% 
+  # shapefiles -----------
+addPolygons(data = r, fillOpacity = 0.5, fillColor = "blue",   
+            stroke = F, popup = r$park_name,
+            group = "Open Space - DOITT") %>%
+  addPolygons(data = r1, fillOpacity = 0.5, fillColor = "red",   
+              stroke = F, popup = r1$signname,
+              group = "Parks Properties") %>%
+  # layers selection ----------
+addLayersControl(
+  overlayGroups = c("Open Space - DOITT", "Parks Properties"),
+  options = layersControlOptions(collapsed = F)) %>% 
+  # legend --------
+addLegend(opacity = 0.7, 
+          colors = c("red", "blue"),
+          labels = c("Parks Properties", 
+                     "Open Space"),
+          title = "Sources",
+          position = "bottomright")
+```
+
+## Available Park Boundaries
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
+# map comparing park boundaries -------------
+
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>% 
+  # shapefiles -----------
+  addPolygons(data = pd, fillOpacity = 0.3, fillColor = "blue",   
+            popup = pd$parkdistrict, color = "blue",
+            group = "Districts") %>%
+  addPolygons(data = ps, fillOpacity = 0.3, fillColor = "red",   
+               popup = ps$sector, color = "red",
+              group = "Sectors") %>%
+  addPolygons(data = pz, fillOpacity = 0.3, fillColor = "green",   
+               popup = pz$propname, color = "green",
+              group = "Zones") %>% 
+  # layers selection ----------
+addLayersControl(
+  overlayGroups = c("Districts", "Sectors", "Zones"),
+  options = layersControlOptions(collapsed = F)) %>% 
+  # legend --------
+addLegend(opacity = 0.7, 
+          colors = c("blue", "red", "green"),
+          labels = c("Districts", "Sectors", "Zones"),
+          title = "Park Boundaries",
+          position = "bottomright") %>% 
+  hideGroup(group = c("Districts", "Sectors"))
+```
+
