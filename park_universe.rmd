@@ -29,19 +29,85 @@ source(here::here( "test.R"))
 
 ```
 
-## Two Main Sources
+## Summary & Follow-up Questions
+
+We found park entrances via the Walk-to-a-Park parks' dataset on open data. This map maybe a version of the improved IBO map. Nick and I think we should use those as the points where to do the distance analysis. Also, since Parks already did a map showing the areas that are 1/4 & 1/2 mile from a park, how much would this be different to a map showing areas that are within a 10 minute walk to a park?
+
+Since you noted that the IBO map was missing park areas, wondering if the park' Walk-to-a-Park dataset has those areas, and if it doesn't what park areas would you like to be included based on the maps below showing the Open Space, Waterfront, & Park Properties dataset?
+
+<br>
+
+***
+
+<br> 
+
+## Park Entrances
+
+Parks did a [Walk-to-a-Park Service area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv) analysis. In their description they state that 'Certain properties in NYC Parks' portfolio, such as cemeteries, community gardens, or sites with no recreational equipment were not included in this analysis. Similarly, some parks and open-space amenities not under the jurisdiction of NYC Parks were included in this analysis, as they provide recreational value.'
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
-# map of full universe -------------
+wpsa_pt_4 <- wpsa_points %>% filter(type == '1/4-Mile')
+wpsa_pt_2 <- wpsa_points %>% filter(type == '1/2-Mile')
 
-leaflet() %>%
+leaflet() %>% 
   # default settings ---------------
   setView(-73.933560,40.704343, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>% 
   # shapefiles -----------
-  addPolygons(data = wpaas, fillColor = "red", dashArray = "4",
-              color = "red", popup = wpaas$name, weight = 3,
-              group = "Waterfront") %>% 
+  addPolygons(data = wpsa_area, fillColor = "green", dashArray = "4", 
+              color = "green", weight = 2, 
+              group = "area") %>%  
+  addCircleMarkers(data = wpsa_pt_2, fillColor = "#264f7d" , 
+                   popup =  paste(wpsa_pt_2$parkname, 
+                                  wpsa_pt_2$type),
+                   color = "#264f7d", radius = 1,
+                   group = "half") %>% 
+   addCircleMarkers(data = wpsa_pt_4, fillColor = "#03c0ff" , 
+                   popup =  paste(wpsa_pt_4$parkname, 
+                                  wpsa_pt_4$type),
+                   color = "#03c0ff", radius = 1,
+                   group = "fourth") %>% 
+
+  # layers selection ----------
+  addLayersControl(
+    overlayGroups = c("half", "fourth"),
+    options = layersControlOptions(collapsed = F)) %>% 
+  # legend --------
+  addLegend(opacity = 0.7, 
+            colors = c("green", "#264f7d", "#03c0ff"),
+            labels = c("total area within walking distance of a park", 
+                       "half-mile", 
+                       "fourth-mile"),
+            position = "bottomright")
+
+```
+
+
+<br>
+
+***
+
+<br> 
+
+## Two Main Sources : Open Spaces & Waterfront
+* There are **`r nrow(rj)`** features is the Open Space file from [NYC Planimetrics Database](https://github.com/CityOfNewYork/nyc-planimetrics/blob/master/Capture_Rules.md#open-space-attributes).  
+
+\vspace{12pt}
+* There are **`r nrow(wpaas)`** features is the Waterfronts file from NYC DCP Waterfront Access Map on [Open Data](https://data.cityofnewyork.us/City-Government/Waterfront-Access-Map-Data-Shapefile/388s-pnvc).  
+
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
+# map of full universe -------------
+ 
+leaflet() %>% 
+  # default settings ---------------
+  setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>% 
+  # shapefiles -----------
+  addPolygons(data = wpaas, fillColor = "red", dashArray = "4", 
+              color = "red", popup = wpaas$name, weight = 3, 
+              group = "Waterfront") %>%  
   addPolygons(data = wpaas_fp, fillOpacity = 1, fillColor = "red",   
               stroke = F, popup = wpaas_fp$sign_name,
               group = "Waterfront") %>% 
@@ -49,7 +115,14 @@ leaflet() %>%
               color = "blue", popup = public_wf$name,
               group = "Waterfront") %>% 
   addPolygons(data = rj, fillColor = "green" , 
-              color = "green", popup = rj$park_name,
+              color = "green", popup = 
+                paste0('<h4><u>', rj$park_name,'</u></h4><br>',
+                       '<b>Land Use: </b>', rj$landuse,
+                       '<br><b>Jurisdiction: /b>', rj$jurisdiction,
+                       '<br><b>Type: </b>', rj$typecategory,
+                       '<br><b>Acres: </b>', rj$acres,
+                       '<br><b>Subcategory: </b>', rj$subcategory,
+                       '<br><b>Subtype: </b>', rj$subtype),
               group = "Open Spaces & Parks") %>% 
   addCircleMarkers(data = wpaas_access, fillColor = "yellow" , 
                    weight = 1, fillOpacity = 1, opacity = 1,
@@ -68,6 +141,7 @@ leaflet() %>%
   addLayersControl(
     overlayGroups = c("Waterfront", "Open Spaces & Parks"),
     options = layersControlOptions(collapsed = F)) %>% 
+  hideGroup(group = "Waterfront") %>% 
   # legend --------
   addLegend(opacity = 0.7, group = "Waterfront",
             colors = c("red", "yellow", "blue", "orange"),
@@ -83,8 +157,45 @@ leaflet() %>%
 
 ```
 
-## Open Space vs Park Properties Shapefile
+<br>
 
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%', out.height='100%'}
+
+df<-data.frame(sort(table(rj$subtype), decreasing = T))
+names(df) <- c('Sub_Types', 'Count')
+
+knitr::kable(df, booktabs = TRUE, row.names = T,
+             caption = "Number of Open Space Features by Sub Type") %>%
+  column_spec(2, width = "2.1in") %>% 
+  kable_styling(latex_options = "striped", 
+                bootstrap_options = "striped", 
+                full_width = FALSE, 
+                row_label_position = 'c', 
+                position = 'float_left')
+# 
+df<-data.frame(sort(table(rj$landuse), decreasing = T))
+names(df) <- c('Landuse_Types', 'Count')
+
+knitr::kable(df, booktabs = TRUE, row.names = T,
+             caption = "Number of Open Space Features by Landuse Type") %>%
+  column_spec(2, width = "2.1in") %>% 
+  kable_styling(latex_options = "striped", 
+                bootstrap_options = "striped", 
+                full_width = FALSE, 
+                row_label_position = 'c', 
+                position = 'center')
+
+
+```
+
+<br>
+
+***
+
+<br> 
+
+## Open Space vs Park Properties Shapefile
+The map below shows overlay between open space and [parks properties](https://data.cityofnewyork.us/Recreation/Parks-Properties/enfh-gkve) shapefiles. The overlay apeears as marron-purple.
 ```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
 # map comparing open space & park properties -------------
 
@@ -110,6 +221,49 @@ addLegend(opacity = 0.7,
                      "Open Space"),
           title = "Sources",
           position = "bottomright")
+```
+
+#### Features in Parks Properties shapefle not found in Open Space shapefile & Vice Versa
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='100%'}
+# map comparing open space & park properties -------------
+
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>% 
+  # shapefiles -----------
+addPolygons(data = r1_minus_innr1, fillOpacity = 0.5, fillColor = "blue",   
+            stroke = T, popup = r1_minus_innr1$typecategory, weight = 5,
+            group = "Parks Properties") %>%
+  addPolygons(data = r_minus_innr, fillOpacity = 0.5, fillColor = "red",   
+              stroke = T, popup = r_minus_innr$park_name, weight = 5, 
+              color = "red", group = "Open Space - DOITT") %>%
+  # layers selection ----------
+addLayersControl(
+  overlayGroups = c("Open Space - DOITT", "Parks Properties"),
+  options = layersControlOptions(collapsed = F)) %>% 
+  # legend --------
+addLegend(opacity = 0.7, 
+          colors = c( "blue", "red"),
+          labels = c("Parks Properties", 
+                     "Open Space"),
+          title = "Sources",
+          position = "bottomright")
+```
+
+<br>
+Features in Parks shapefile not found in Open Space shapefle
+```{r}
+df <- as.data.frame(r1_minus_innr1) 
+datatable(df[,c("name311","location","typecategory", "subcategory", "jurisdiction", "acres")], style = 'bootstrap', options = list(pageLength=14))
+```
+
+<br>
+
+Features in Open Space shapefle not found in Parks shapefile
+```{r}
+df <- as.data.frame(r_minus_innr) 
+datatable(df[,c("park_name","parknum", "landuse", "subtype", "acres")], style = 'bootstrap', options = list(pageLength=14))
 ```
 
 ## Available Park Boundaries

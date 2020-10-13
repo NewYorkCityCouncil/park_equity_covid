@@ -29,12 +29,32 @@ rj<- left_join(r,r1df, by = c("parknum"="omppropid")) %>%
   filter(!duplicated(source_id)) %>% 
   mutate(uid = paste0(source_id, globalid))
 
+# fill in 
+rna<-r[which(is.na(rj$park_name)==T),]
+# map to see what/where are they
+# leaflet() %>%
+#   # default settings ---------------
+# setView(-73.933560,40.704343, zoom = 10.5) %>%
+#   addProviderTiles("CartoDB.Positron") %>% 
+#   addPolygons(data = rna, fillOpacity = 0.5, fillColor = "blue",   
+#               stroke = T, popup = rna$feat_code)
 
-# check duplicated ones
+# get park feature codes -----
+# https://github.com/CityOfNewYork/nyc-planimetrics/blob/master/Capture_Rules.md#open-space-attributes
+
+pf <- read.csv("data/park_features.csv", stringsAsFactors = F) %>% 
+  janitor::clean_names()
+rj$feat_code <- as.integer(as.character(rj$feat_code))
+rj <- rj %>% left_join(pf, by = c("feat_code"="feature_code"))
+
+rj[is.na(rj$landuse)==T,]$landuse <- rj[is.na(rj$landuse)==T,]$subtype
+
+
+# check duplicated ones ------
 #rj_dup <- left_join(r,r1df, by = c("parknum"="omppropid")) 
 #rj_dup<- rj_dup[duplicated(rj_dup$source_id),]
 
-# list not found in one or the other
+# list not found in one or the other ------
 rdf<- r %>% as.data.frame() %>% select(!geometry)
 
 rj1<- left_join(r1,rdf, by=c("omppropid"="parknum")) %>% 
@@ -87,3 +107,9 @@ pz <- st_read("https://nycopendata.socrata.com/api/geospatial/4j29-i5ry?method=e
 
 
 # park closures during covid
+
+
+# walk to a park service area ----
+wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON")
+
+wpsa_area<- st_read('https://data.cityofnewyork.us/api/geospatial/rg6q-zak8?method=export&format=GeoJSON')
