@@ -42,34 +42,51 @@ acs5_sub_tract <- getCensus(
   region = "tract:*", 
   regionin = "state:36+county:005,047,081,085,061")
 
-acs5_sub_tract$boro_code <- 0
-for(i in 1:nrow(acs5_sub_tract)){ 
-if(acs5_sub_tract$county[i]=="005") acs5_sub_tract$boro_code[i] <- "2"
-if(acs5_sub_tract$county[i]=="081") acs5_sub_tract$boro_code[i] <- "4"
-if(acs5_sub_tract$county[i]=="061") acs5_sub_tract$boro_code[i] <- "1"
-if(acs5_sub_tract$county[i]=="047") acs5_sub_tract$boro_code[i] <- "3"
-if(acs5_sub_tract$county[i]=="085") acs5_sub_tract$boro_code[i] <- "5"
-}
-acs5_sub_tract$boro_ct201 <- paste0(acs5_sub_tract$boro_code, acs5_sub_tract$tract)
+pop_col <- c("NAME", "B01003_001E")
 
-ct_income <- st_sf(merge(acs5_sub_tract, ct, by="boro_ct201"))
-ct_income$S1901_C01_012E <- ifelse(ct_income$S1901_C01_012E<=0, NA, ct_income$S1901_C01_012E)
+acs5_det_tract <- getCensus(
+  name = "acs/acs5",
+  vintage = 2018,
+  vars = pop_col, 
+  region = "tract:*", 
+  regionin = "state:36+county:005,047,081,085,061")
+
+acs_tract <- merge(acs5_sub_tract, acs5_det_tract[,c("NAME", "B01003_001E")], by="NAME")
+
+acs_tract$boro_code <- 0
+for(i in 1:nrow(acs_tract)){ 
+if(acs_tract$county[i]=="005") acs_tract$boro_code[i] <- "2"
+if(acs_tract$county[i]=="081") acs_tract$boro_code[i] <- "4"
+if(acs_tract$county[i]=="061") acs_tract$boro_code[i] <- "1"
+if(acs_tract$county[i]=="047") acs_tract$boro_code[i] <- "3"
+if(acs_tract$county[i]=="085") acs_tract$boro_code[i] <- "5"
+}
+acs_tract$boro_ct201 <- paste0(acs_tract$boro_code, acs_tract$tract)
+
+ct_demo <- st_sf(merge(acs_tract, ct, by="boro_ct201"))
+ct_demo$S1901_C01_012E <- ifelse(ct_demo$S1901_C01_012E<=0, NA, ct_demo$S1901_C01_012E)
 
 # Income and Within 10-min Walk Overlay
 map_income <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=ct_income,
+  addPolygons(data=ct_demo,
               weight = 1,
               color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = ct_income$S1901_C01_012E)(ct_income$S1901_C01_012E),
+              fillColor = ~colorBin("YlOrRd", domain = ct_demo$S1901_C01_012E)(ct_demo$S1901_C01_012E),
               fillOpacity = 0.5,
               group = "Income") %>%
+  addPolygons(data=ct_demo,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = ct_demo$B01003_001E)(ct_demo$B01003_001E),
+              fillOpacity = 0.5,
+              group = "Pop") %>%
   addPolygons(data=shape, weight=1, group= "Walk") %>%
 #  addCircles(data=ct_income$center, group= "Center") %>%
   addCircles(data=access, group= "Access", color="red") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Income", "Access"),
+    overlayGroups = c("Walk", "Income", "Pop", "Access"),
     options = layersControlOptions(collapsed = FALSE))
 map_income
 
