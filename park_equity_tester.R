@@ -4,6 +4,8 @@ library(leaflet)
 library(sf)
 library(censusapi)
 library(rgeos)
+library(ggplot2)
+library(dplyr)
 
 rm(list=ls())
 
@@ -65,11 +67,12 @@ acs_tract$boro_ct201 <- paste0(acs_tract$boro_code, acs_tract$tract)
 
 ct_demo <- st_sf(merge(acs_tract, ct, by="boro_ct201"))
 ct_demo$S1901_C01_012E <- ifelse(ct_demo$S1901_C01_012E<=0, NA, ct_demo$S1901_C01_012E)
+ct_demo$B01003_001E <- ifelse(ct_demo$B01003_001E<=0, NA, ct_demo$B01003_001E)
 
 ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
 
 # Income and Within 10-min Walk Overlay
-map_income <- leaflet() %>%
+map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addPolygons(data=ct_demo,
@@ -90,9 +93,60 @@ map_income <- leaflet() %>%
   addCircles(data=subset(ct_demo, ins==0)$center, group= "Not Walkable", color="black") %>%
   addLayersControl(
     overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable"),
-    options = layersControlOptions(collapsed = FALSE))
-map_income
+    options = layersControlOptions(collapsed = FALSE)) %>% 
+  hideGroup("Income") %>% 
+  hideGroup("Pop") %>% 
+  hideGroup("Access") %>% 
+  hideGroup("Center") 
+map
+
+ggplot(ct_demo,aes(x=S1901_C01_012E)) + 
+  geom_histogram(data=subset(ct_demo,ins == 0),fill = "red", alpha = 0.2) +
+  geom_histogram(data=subset(ct_demo,ins == 1),fill = "blue", alpha = 0.2) +
+  theme_minimal() + 
+  labs(
+    x= "Median Income", 
+    y= "Number of Census Tracts",
+    title = "Income Distribution by Walkable to Park"
+  ) + 
+  facet_wrap(~boro_name)
+
+ggplot(ct_demo,aes(x=B01003_001E)) + 
+  geom_histogram(data=subset(ct_demo,ins == 0),fill = "red", alpha = 0.2) +
+  geom_histogram(data=subset(ct_demo,ins == 1),fill = "blue", alpha = 0.2) +
+  theme_minimal() + 
+  labs(
+    x= "Population", 
+    y= "Number of Census Tracts",
+    title = "Population Distribution by Walkable to Park"
+  ) + 
+  facet_wrap(~boro_name)
 
 
+# Census tract summary data
+ct_boro_total <- ct_demo %>%
+  st_drop_geometry() %>%
+  group_by(boro_name) %>%
+  summarise(total=n())
 
+ct_boro_ins <- subset(ct_demo, ins==0) %>%
+  st_drop_geometry() %>%
+  group_by(boro_name) %>%
+  summarise(outside=n())
 
+ct_boro <- merge(ct_boro_total, ct_boro_ins, by="boro_name")
+ct_boro$perc_ct <- ct_boro$outside/ct_boro$total
+
+# Population summary data
+pop_boro_total <- ct_demo %>%
+  st_drop_geometry() %>%
+  group_by(boro_name) %>%
+  summarise(total=sum(B01003_001E, na.rm=TRUE))
+
+pop_boro_ins <- subset(ct_demo, ins==0) %>%
+  st_drop_geometry() %>%
+  group_by(boro_name) %>%
+  summarise(outside=sum(B01003_001E, na.rm=TRUE))
+
+pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
+pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
