@@ -66,6 +66,8 @@ acs_tract$boro_ct201 <- paste0(acs_tract$boro_code, acs_tract$tract)
 ct_demo <- st_sf(merge(acs_tract, ct, by="boro_ct201"))
 ct_demo$S1901_C01_012E <- ifelse(ct_demo$S1901_C01_012E<=0, NA, ct_demo$S1901_C01_012E)
 
+ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
+
 # Income and Within 10-min Walk Overlay
 map_income <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -83,11 +85,14 @@ map_income <- leaflet() %>%
               fillOpacity = 0.5,
               group = "Pop") %>%
   addPolygons(data=shape, weight=1, group= "Walk") %>%
-#  addCircles(data=ct_income$center, group= "Center") %>%
+  addCircles(data=ct_demo$center, group= "Center") %>%
   addCircles(data=access, group= "Access", color="red") %>%
+  addCircles(data=subset(ct_demo, ins==0)$center, group= "Not Walkable", color="black") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Income", "Pop", "Access"),
+    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable"),
     options = layersControlOptions(collapsed = FALSE))
 map_income
+
+
 
 
