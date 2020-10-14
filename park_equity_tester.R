@@ -11,9 +11,9 @@ rm(list=ls())
 
 # Access Points
 
-access <- read_sf("Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
+access <- read_sf("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
-shape <- read_sf("Walk-to-a-Park Service area/geo_export_f18e18a9-a859-4692-a3e0-48095a41a0d2.shp") %>%
+shape <- read_sf("data/Walk-to-a-Park Service area/geo_export_f18e18a9-a859-4692-a3e0-48095a41a0d2.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
 map_access <- leaflet() %>%
@@ -150,3 +150,8 @@ pop_boro_ins <- subset(ct_demo, ins==0) %>%
 
 pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
 pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
+
+
+
+
+
