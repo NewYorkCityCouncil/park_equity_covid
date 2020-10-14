@@ -6,6 +6,7 @@ library(censusapi)
 library(rgeos)
 library(ggplot2)
 library(dplyr)
+library(htmltools)
 
 rm(list=ls())
 
@@ -72,6 +73,12 @@ ct_demo$B01003_001E <- ifelse(ct_demo$B01003_001E<=0, NA, ct_demo$B01003_001E)
 ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
 
 # Income and Within 10-min Walk Overlay
+
+labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
+                "<p>",paste0("Tract: ",ct_demo$tract),"</p>", 
+                "<p>",paste0("Median Income: ",ct_demo$S1901_C01_012E),"</p>",  
+                "<p>",paste0("Population: ",ct_demo$B01003_001E),"</p>")
+
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
@@ -80,17 +87,26 @@ map <- leaflet() %>%
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = ct_demo$S1901_C01_012E)(ct_demo$S1901_C01_012E),
               fillOpacity = 0.5,
-              group = "Income") %>%
+              group = "Income", 
+              popup = lapply(labels,HTML)) %>%
   addPolygons(data=ct_demo,
               weight = 1,
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = ct_demo$B01003_001E)(ct_demo$B01003_001E),
               fillOpacity = 0.5,
-              group = "Pop") %>%
-  addPolygons(data=shape, weight=1, group= "Walk") %>%
-  addCircles(data=ct_demo$center, group= "Center") %>%
-  addCircles(data=access, group= "Access", color="red") %>%
-  addCircles(data=subset(ct_demo, ins==0)$center, group= "Not Walkable", color="black") %>%
+              group = "Pop", 
+              popup = lapply(labels,HTML)) %>%
+  addPolygons(data=shape, 
+              weight=1, 
+              group= "Walk") %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center") %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red") %>%
+  addCircles(data=subset(ct_demo, ins==0)$center, 
+             group= "Not Walkable", 
+             color="black") %>%
   addLayersControl(
     overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
@@ -153,5 +169,18 @@ pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 
 
 
+# IBO map
+ps_ct <- st_read("data/ParkSpaceCT/PPC4.shp") %>%
+  st_transform("+proj=longlat +datum=WGS84")
+pncf <- st_read("data/parksNeighborCommFlag/parksfixed.shp") 
 
-
+map_ibo <- leaflet(pncf) %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(weight=1) %>%
+  addPolygons(data=ps_ct,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorNumeric("YlOrRd", domain = ps_ct$Sqftper_Ca)(ps_ct$Sqftper_Ca),
+              fillOpacity = 0.5)
+map_ibo
