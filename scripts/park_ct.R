@@ -9,6 +9,7 @@ library(dplyr)
 library(htmltools)
 library(rgdal)
 library(raster)
+library(stringr)
 
 rm(list=ls())
 
@@ -74,7 +75,54 @@ ct_demo$B01003_001E <- ifelse(ct_demo$B01003_001E<=0, NA, ct_demo$B01003_001E)
 
 ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
 
-# Income and Within 10-min Walk Overlay
+
+# COVID
+
+### Import and Clean Covid and Crosswalk Data
+
+# Covid data from NYC Health
+URL_C19 <- "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/data-by-modzcta.csv"
+C19 <- read.csv(URL_C19)
+C19$MODZCTA <- as.character(C19$MODIFIED_ZCTA); C19 <- C19[,!(names(C19) %in% "MODIFIED_ZCTA")]
+
+# Crosswalk between census tract and zcta
+# https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_3
+URL_ZCTAtoCT <- "https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_tract_rel_10.txt?#"
+ZCTAtoCT <- read.csv(URL_ZCTAtoCT)
+# Only keep NYC
+ZNYC <- subset(ZCTAtoCT, STATE=="36" & (COUNTY=="05" | COUNTY=="5" | COUNTY=="47" | COUNTY=="81" | COUNTY=="85" | COUNTY=="61"))
+
+# Crosswalk between zcta and modzcta
+URL_MZtoZ <- "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/Geography-resources/ZCTA-to-MODZCTA.csv"
+MZtoZ <- fread(URL_MZtoZ)
+MZtoZ <- MZtoZ %>% rename(ZCTA5 = ZCTA)
+MZtoZ[,1:2] <- lapply(MZtoZ[,1:2], as.character)
+
+### Crosswalk between census tract and zcta (ZNYC)
+
+ZNYC <- ZNYC %>% rename(tract = TRACT)
+ZNYC$tract <- as.character(as.numeric(ZNYC$tract/100))
+ZNYC$boro_code <- str_sub(ZNYC$GEOID,-8,-7) #strip boro code from GEOID
+
+# boro codes are different
+Convertboro <- data.table(Census_boro_code = c('05','47','81','85','61'), 
+                          boro_code=c(2,3,4,5,1), 
+                          boro_name = c("Bronx","Brooklyn","Queens","Staten Island","Manhattan"))
+
+# apply correct boro codes and names
+ZNYC[,c("boro_code","boro_name") := .(lapply(boro_code, function(x) Convertboro[Census_boro_code == x,boro_code]),
+                                      lapply(boro_code, function(x) Convertboro[Census_boro_code == x,boro_name]))][
+                                        ,name := paste0('Census Tract ',tract,', ',boro_name,' Boro')]
+
+
+
+
+
+########################################################################
+
+# MAP
+
+# Demographics and Within 10-min Walk Overlay
 
 labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_demo$tract),"</p>", 
@@ -187,39 +235,42 @@ map_buffer <- leaflet() %>%
              color="red")
 map_buffer
 
-test <- buffer[10,]
-
-#map_test <- leaflet() %>%
-#  setView(-73.935242,40.730610,10) %>%
-#  addProviderTiles("CartoDB.Positron") %>%
-#  addPolygons(data=test, weight=1) %>%
-#  addCircles(data=ct_demo$center, 
-#             group= "Center", 
-#             popup = lapply(labels,HTML)) %>%
-#  addCircles(data=access, 
-#             group= "Access", 
-#             color="red")
-#map_test
+# test <- subset(buffer, parkname=="East River Park")
+# 
+# map_test <- leaflet() %>%
+#   setView(-73.935242,40.730610,10) %>%
+#   addProviderTiles("CartoDB.Positron") %>%
+#   addPolygons(data=test, weight=0.1) %>%
+#   addCircles(data=ct_demo$center,
+#              group= "Center",
+#              popup = lapply(labels,HTML)) %>%
+#   addCircles(data=access,
+#              group= "Access",
+#              color="red")
+# map_test
+# sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
 
 ct_walk <- ct_demo
+# name NA park "NA"
 parknames <- ifelse(!is.na(as.character(unique(buffer@data$parkname))), as.character(unique(buffer@data$parkname)), "NA")
+# create column for each park
 ct_walk[, parknames] <- 0 
 
 for (i in parknames){
   temp_cens <- ct_demo[0,]
+  # collect the access points for each park
   for (j in rownames(buffer@data[which(buffer@data$parkname==i),])){
+    # rows off by 1 for some reason
     temp_sp <- SpatialPolygons(list(buffer@polygons[[as.numeric(j)+1]])) 
+    # make same crs
     crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
     # create list of all census tracts within buffer of access points to parkname (i)
     temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
   }
-  
+  # each column says whether or not the census tract has access to the column name park
   nam <- i
   ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
 }
-
-
-
 
 
 
