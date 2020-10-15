@@ -2,6 +2,7 @@ library(RSocrata)
 library(sf)
 library(dplyr)
 library(leaflet)
+library(measurements)
 
 
 # open space (parks) -----------
@@ -30,7 +31,7 @@ rj<- left_join(r,r1df, by = c("parknum"="omppropid")) %>%
   mutate(uid = paste0(source_id, globalid))
 
 # fill in 
-rna<-r[which(is.na(rj$park_name)==T),]
+rna<-r[which(is.na(rj$parknum==T)),]
 # map to see what/where are they
 # leaflet() %>%
 #   # default settings ---------------
@@ -115,8 +116,18 @@ wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?m
 
 wpsa_area<- st_read('https://data.cityofnewyork.us/api/geospatial/rg6q-zak8?method=export&format=GeoJSON')
 
+
+# there are rows for subfeatures within a main feature, using parknum and the largest shape area to select the main features 
+length(which(is.na(rj$parknum)==T))
+ff <- rj %>% 
+  group_by(parknum) %>%
+  top_n(1, abs(as.integer(as.character(shape_area))))
+
+# test
+ tt <- rj %>% filter(parknum=="BS29")
+
 # join open space features to wpsa points ----
- # map test
+# map test
 leaflet() %>%
   # default settings ---------------
 setView(-73.933560,40.704343, zoom = 10.5) %>%
@@ -124,12 +135,47 @@ setView(-73.933560,40.704343, zoom = 10.5) %>%
   addCircleMarkers(data = wpsa_points, color = 'green', 
                    radius = 4, weight = 1,
                    popup = paste(wpsa_points$parkname, 
-                                 wpsa_points$gispropnum)
-  ) %>% 
-  addPolygons(data = rj[w1,], weight = 1,
-              popup = paste(rj$park_name, 
-                            rj$parknum)
-  )
+                                 wpsa_points$gispropnum)) %>% 
+  addPolygons(data = rj_dissolve, weight = 1) %>% 
+   addPolygons(data = shape, color = "red", weight = 1)
+
+
+ 
+ 
+# join dissolve parks
+ rj_dissolve <- rj %>% 
+   select(parknum, park_name,landuse, jurisdiction, location, 
+          typecategory, name311, subcategory, acquisitiondate, subtype) %>% 
+   group_by(parknum) %>% 
+   summarize(park_name = first(park_name),
+             landuse = paste(unique(landuse), collapse = ", "),
+             jurisdiction = paste(unique(jurisdiction), collapse = ", "),
+             location = paste(unique(location), collapse = ", "),
+             typecategory = paste(unique(typecategory), collapse = ", "),
+             name311 = paste(unique(name311), collapse = ", "),
+             subcategory = paste(unique(subcategory), collapse = ", "),
+             acquisitiondate = paste(unique(acquisitiondate), collapse = ", "),
+             subtype = paste(unique(subtype), collapse = ", ")) 
+   
+ # to square foot
+ 
+ #st_area(rj_dissolve)[1]
+ #1971.664 [m^2]
+ 
+ convert_sqm_2_sqft <- function(sq_meters){
+   sqin_per_sqm = 39.3 * 39.3
+   sqft_per_sqm <- sqin_per_sqm / 144
+   return(sq_meters * sqft_per_sqm)
+ }
+ 
+   rj_dissolve$squareft = convert_sqm_2_sqft(as.numeric(st_area(rj_dissolve)))
+   
+  
+
+
+   
+   st_write(rj_dissolve, "data/openspace_parks_dissolve.geojson",
+            driver='GeoJSON', delete_dsn=TRUE)
 
 # pluto res ------
 #pluto <- st_read("data/pluto_res_columns.geojson") %>% 
