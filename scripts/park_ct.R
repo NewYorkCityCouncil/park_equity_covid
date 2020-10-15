@@ -7,6 +7,8 @@ library(rgeos)
 library(ggplot2)
 library(dplyr)
 library(htmltools)
+library(rgdal)
+library(raster)
 
 rm(list=ls())
 
@@ -116,6 +118,8 @@ map <- leaflet() %>%
   hideGroup("Center") 
 map
 
+########################################################################
+
 ggplot(ct_demo,aes(x=S1901_C01_012E)) + 
   geom_histogram(data=subset(ct_demo,ins == 0),fill = "red", alpha = 0.2) +
   geom_histogram(data=subset(ct_demo,ins == 1),fill = "blue", alpha = 0.2) +
@@ -168,19 +172,90 @@ pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
 pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 
 
+########################################################################
 
-# IBO map
-ps_ct <- st_read("data/ParkSpaceCT/PPC4.shp") %>%
-  st_transform("+proj=longlat +datum=WGS84")
-pncf <- st_read("data/parksNeighborCommFlag/parksfixed.shp") 
+buffer <- readOGR("data/halfmile_buffer_pts.geojson")
 
-map_ibo <- leaflet(pncf) %>%
+map_buffer <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(weight=1) %>%
-  addPolygons(data=ps_ct,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorNumeric("YlOrRd", domain = ps_ct$Sqftper_Ca)(ps_ct$Sqftper_Ca),
-              fillOpacity = 0.5)
-map_ibo
+  addPolygons(data=buffer, weight=1) %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center") %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red")
+map_buffer
+
+test <- buffer[10,]
+
+map_test <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=test, weight=1) %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center", 
+             popup = lapply(labels,HTML)) %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red")
+map_test
+
+##tract 003300 in
+##tract 002900 out
+
+ct_walk <- ct_demo
+parknames <- ifelse(!is.na(as.character(unique(buffer@data$parkname))), as.character(unique(buffer@data$parkname)), "NA")
+ct_walk[, parknames] <- 0 
+
+for (i in parknames){
+  temp_cens <- ct_demo[0,]
+  for (j in rownames(buffer@data[which(buffer@data$parkname==i),])){
+    temp_sp <- SpatialPolygons(list(buffer@polygons[[as.numeric(j)+1]])) 
+    crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
+    # create list of all census tracts within buffer of access points to parkname (i)
+    temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
+  }
+  
+  nam <- i
+  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
+  
+  
+}
+
+# buffer@data[which(buffer@data$parkname=="Central Park"),]
+# buffer@polygons[which(buffer@data$parkname=="Central Park")]
+# rownames(buffer@data[which(buffer@data$parkname=="Central Park"),])
+# buffer@data[rowi-1,]
+# buffer@polygons[[rowi-1]]
+
+
+# ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
+# buffer@polygons[[1]]@Polygons[[1]]@coords
+# SpatialPolygons(list(Polygons(list(Polygon(buffer@polygons[[1]]@Polygons[[1]]@coords)),1)))
+# SpatialPolygons(list(buffer@polygons[[1]]))
+# raster::crs(SpatialPolygons(list(buffer@polygons[[1]]))) <- CRS("+proj=longlat +datum=WGS84")
+# over(test_sp, as_Spatial(ct_demo$center))
+
+
+test_sp <- SpatialPolygons(list(buffer@polygons[[10]])) 
+crs(test_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
+over(test_sp, as_Spatial(ct_demo$center))
+ct_demo[!is.na(over(as_Spatial(ct_demo$center), test_sp)),]
+
+
+temp_cens <- ct_demo[0,]
+for (j in rownames(buffer@data[which(buffer@data$parkname=="Central Park"),])){
+  temp_sp <- SpatialPolygons(list(buffer@polygons[[as.numeric(j)+1]])) 
+  crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
+  temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
+}
+
+
+
+
+
+
+
+
+
