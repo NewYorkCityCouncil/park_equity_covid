@@ -2,12 +2,15 @@ library(RSocrata)
 library(sf)
 library(dplyr)
 library(leaflet)
-library(measurements)
+
 
 
 # open space (parks) -----------
-r <- st_read("https://data.cityofnewyork.us/api/geospatial/g84h-jbjm?method=export&format=GeoJSON")  %>% 
-  st_simplify(dTolerance = .0001)
+r <- st_read("https://data.cityofnewyork.us/api/geospatial/g84h-jbjm?method=export&format=GeoJSON") 
+  
+r_shp <- st_read('data/OpenSpace/geo_export_731ca47d-b06c-49f3-811d-c1d13862f1b9.shp') 
+  
+
 
 r$parknum <- as.character(r$parknum)
 
@@ -51,6 +54,7 @@ pf <- read.csv("data/park_features.csv", stringsAsFactors = F) %>%
 rj$feat_code <- as.integer(as.character(rj$feat_code))
 rj <- rj %>% left_join(pf, by = c("feat_code"="feature_code"))
 
+rj$landuse <- as.character(rj$landuse)
 rj[is.na(rj$landuse)==T,]$landuse <- rj[is.na(rj$landuse)==T,]$subtype
 
 
@@ -132,22 +136,24 @@ leaflet() %>%
   # default settings ---------------
 setView(-73.933560,40.704343, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(data = wpsa_points, color = 'green', 
-                   radius = 4, weight = 1,
-                   popup = paste(wpsa_points$parkname, 
-                                 wpsa_points$gispropnum)) %>% 
-  addPolygons(data = rj_dissolve, weight = 1) %>% 
-   addPolygons(data = shape, color = "red", weight = 1)
+  # addCircleMarkers(data = wpsa_points, color = 'green', 
+  #                  radius = 4, weight = 1,
+  #                  popup = paste(wpsa_points$parkname, 
+  #                                wpsa_points$gispropnum)) %>% 
+  # addPolygons(data = buff, weight = 1, color="green") %>% 
+  addPolygons(data = tp, weight = 5, popup = tp$park_name) %>% 
+ #  addPolygons(data = shape, color = "red", weight = 1)
 
-
- 
+buff <- st_read("data/halfmile_buffer_pts.geojson")
+tp <- rj_dissolve %>% filter(squareft<1) 
  
 # join dissolve parks
  rj_dissolve <- rj %>% 
-   select(parknum, park_name,landuse, jurisdiction, location, 
+   select(shape_area, parknum, park_name,landuse, jurisdiction, location, 
           typecategory, name311, subcategory, acquisitiondate, subtype) %>% 
    group_by(parknum) %>% 
    summarize(park_name = first(park_name),
+             shape_area = max(as.numeric(shape_area)),
              landuse = paste(unique(landuse), collapse = ", "),
              jurisdiction = paste(unique(jurisdiction), collapse = ", "),
              location = paste(unique(location), collapse = ", "),
@@ -161,7 +167,7 @@ setView(-73.933560,40.704343, zoom = 10.5) %>%
  
  #st_area(rj_dissolve)[1]
  #1971.664 [m^2]
- 
+ # https://rpubs.com/oaxacamatt/sqm_2_sqft
  convert_sqm_2_sqft <- function(sq_meters){
    sqin_per_sqm = 39.3 * 39.3
    sqft_per_sqm <- sqin_per_sqm / 144
@@ -169,9 +175,7 @@ setView(-73.933560,40.704343, zoom = 10.5) %>%
  }
  
    rj_dissolve$squareft = convert_sqm_2_sqft(as.numeric(st_area(rj_dissolve)))
-   
-  
-
+   rj_dissolve$test = as.numeric(st_area(rj_dissolve))
 
    
    st_write(rj_dissolve, "data/openspace_parks_dissolve.geojson",
