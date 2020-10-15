@@ -6,15 +6,11 @@ library(sp)
 
 
 # walk to a park service area ----
-wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON") 
+wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON") %>% 
+  filter(!type=="1/4 MILE AND 1/2 MILE SERVED AREA")
 
 wpsa_points$type <- as.character(wpsa_points$type)
 
-
-wpsa_points <- wpsa_points[wpsa_points$type!="1/4 MILE AND 1/2 MILE SERVED AREA",]
-
-wpsa_points <- wpsa_points[ ! st_is_empty( wpsa_points ) , ]
-sp_wpsa_pts<- as_Spatial(wpsa_points)
 
 wpsa_area<- st_read('https://data.cityofnewyork.us/api/geospatial/rg6q-zak8?method=export&format=GeoJSON')
 
@@ -47,14 +43,15 @@ for(i in 1:nrow(sp_wpsa_pts)){
   print(i)
 }
 
-
+cb<- st_as_sf(correct_buff)
+st_write(cb, "data/halfmile_buffer_pts.geojson")
 
 # half mile buffer
 # 0.0145 degrees of arc per mile
 # # http://mathcentral.uregina.ca/QQ/database/QQ.09.97/dyck1.html#:~:text=The%20length%20of%20an%20arc,360%3D69%20miles%20per%20degree. 
 
 # buffer of all wpsa points at half a mile
-buff_half<- st_buffer(wpsa_points, 0.00725)
+buff_half<- st_buffer(access, units::set_units(0.00725, degree))
 
 # buffer of wpsa points at fourth and a half a mile
 buff_
@@ -64,4 +61,4 @@ leaflet() %>%
 setView(-73.933560,40.704343, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>% 
   # shapefiles -----------
-addPolygons(data = correct_buff, weight = 1) 
+addPolygons(data = buff_half, weight = 1, fillOpacity = 0.1, opacity = .1) 

@@ -25,7 +25,7 @@ knitr::opts_chunk$set(echo = FALSE, embed = TRUE)
 knitr::opts_knit$set(root.dir = here::here())
 options(scipen = 999)
 
-source(here::here( "test.R"))
+source(here::here("scripts", "park_universe.R"))
 
 ```
 
@@ -41,6 +41,31 @@ Since you noted that the IBO map was missing park areas, wondering if the park' 
 
 <br> 
 
+## Walk vs Open Space Datasets
+```{r}
+# join open space features to wpsa points ----
+ # map test
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(data = wpsa_points, color = 'green', 
+                   radius = 4, weight = 1,
+                   popup = paste(wpsa_points$parkname, 
+                                 wpsa_points$gispropnum)
+  ) %>% 
+  addPolygons(data = rj[w1,], weight = 1,
+              popup = paste(rj$park_name, 
+                            rj$parknum)
+  )
+```
+
+<br>
+
+***
+
+<br> 
+
 ## Park Entrances
 
 Parks did a [Walk-to-a-Park Service area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv) analysis. In their description they state that 'Certain properties in NYC Parks' portfolio, such as cemeteries, community gardens, or sites with no recreational equipment were not included in this analysis. Similarly, some parks and open-space amenities not under the jurisdiction of NYC Parks were included in this analysis, as they provide recreational value.'
@@ -49,13 +74,19 @@ Parks did a [Walk-to-a-Park Service area](https://data.cityofnewyork.us/Recreati
 wpsa_pt_4 <- wpsa_points %>% filter(type == '1/4-Mile')
 wpsa_pt_2 <- wpsa_points %>% filter(type == '1/2-Mile')
 
+bb<- st_read("https://data.cityofnewyork.us/api/geospatial/tqmj-j8zm?method=export&format=GeoJSON")
+
+pluto <- st_read("data/pluto_res_only.geojson") %>% 
+  st_simplify(dTolerance = .0001)
+
 leaflet() %>% 
   # default settings ---------------
   setView(-73.933560,40.704343, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>% 
   # shapefiles -----------
+  addPolygons(data = bb, weight = 1) %>% 
   addPolygons(data = wpsa_area, fillColor = "green", dashArray = "4", 
-              color = "green", weight = 2, 
+              color = "green", weight = 1, 
               group = "area") %>%  
   addCircleMarkers(data = wpsa_pt_2, fillColor = "#264f7d" , 
                    popup =  paste(wpsa_pt_2$parkname, 

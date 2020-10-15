@@ -39,6 +39,9 @@ rna<-r[which(is.na(rj$park_name)==T),]
 #   addPolygons(data = rna, fillOpacity = 0.5, fillColor = "blue",   
 #               stroke = T, popup = rna$feat_code)
 
+w1 <- which(is.na(rj$system)==T)
+
+
 # get park feature codes -----
 # https://github.com/CityOfNewYork/nyc-planimetrics/blob/master/Capture_Rules.md#open-space-attributes
 
@@ -106,10 +109,30 @@ pz <- st_read("https://nycopendata.socrata.com/api/geospatial/4j29-i5ry?method=e
 
 
 
-# park closures during covid
-
-
 # walk to a park service area ----
-wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON")
+wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON")  %>% 
+  filter(!type=="1/4 MILE AND 1/2 MILE SERVED AREA")
 
 wpsa_area<- st_read('https://data.cityofnewyork.us/api/geospatial/rg6q-zak8?method=export&format=GeoJSON')
+
+# join open space features to wpsa points ----
+ # map test
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(data = wpsa_points, color = 'green', 
+                   radius = 4, weight = 1,
+                   popup = paste(wpsa_points$parkname, 
+                                 wpsa_points$gispropnum)
+  ) %>% 
+  addPolygons(data = rj[w1,], weight = 1,
+              popup = paste(rj$park_name, 
+                            rj$parknum)
+  )
+
+# pluto res ------
+#pluto <- st_read("data/pluto_res_columns.geojson") %>% 
+#  filter(unitsres>0)
+
+#st_write(pluto, "data/pluto_res_only.geojson")
