@@ -153,9 +153,11 @@ map_iso
 
 ct_walk <- ct_demo
 # name NA park "NA"
-# check!!!
-parknames <- unique(iso$parkid)
-
+parknames <- ifelse(!is.na(as.character(unique(iso@data$parkname))), 
+                    as.character(unique(iso@data$parkname)), 
+                    ifelse(!is.na(as.character(unique(iso@data$gispropnum))),
+                           as.character(unique(iso@data$gispropnum)), 
+                    ))
 iso@data$id <- parknames
 # create column for each park
 ct_walk[, parknames] <- 0 
