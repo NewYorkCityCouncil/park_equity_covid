@@ -232,6 +232,8 @@ pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 
 ########################################################################
 
+# 1/2 Mile buffers
+
 buffer <- readOGR("data/halfmile_buffer_pts.geojson")
 
 map_buffer <- leaflet() %>%
@@ -281,6 +283,63 @@ for (i in parknames){
   nam <- i
   ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
 }
+
+
+
+########################################################################
+
+# 10-Min Walk buffers
+
+iso <- readOGR("data/isochrones_10min_accesspts.geojson")
+
+map_iso <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=iso, weight=1) %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center") %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red")
+map_iso
+
+test <- subset(iso, parkname=="East River Park")
+
+map_test <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=test, weight=0.1) %>%
+  addCircles(data=ct_demo$center,
+             group= "Center",
+             popup = lapply(labels,HTML)) %>%
+  addCircles(data=access,
+             group= "Access",
+             color="red")
+map_test
+sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
+
+ct_walk <- ct_demo
+# name NA park "NA"
+parknames <- ifelse(!is.na(as.character(unique(iso@data$parkname))), as.character(unique(iso@data$parkname)), "NA")
+# create column for each park
+ct_walk[, parknames] <- 0 
+
+for (i in parknames){
+  temp_cens <- ct_demo[0,]
+  # collect the access points for each park
+  for (j in rownames(iso@data[which(iso@data$parkname==i),])){
+    # rows off by 1 for some reason
+    temp_sp <- SpatialPolygons(list(iso@polygons[[as.numeric(j)+1]])) 
+    # make same crs
+    crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
+    # create list of all census tracts within iso of access points to parkname (i)
+    temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
+  }
+  # each column says whether or not the census tract has access to the column name park
+  nam <- i
+  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
+}
+
 
 
 
