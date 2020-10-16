@@ -2,6 +2,7 @@ library(RSocrata)
 library(sf)
 library(dplyr)
 library(leaflet)
+library(nngeo)
 
 
 
@@ -136,11 +137,12 @@ leaflet() %>%
   # default settings ---------------
 setView(-73.933560,40.704343, zoom = 10.5) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  # addCircleMarkers(data = wpsa_points, color = 'green', 
-  #                  radius = 4, weight = 1,
-  #                  popup = paste(wpsa_points$parkname, 
-  #                                wpsa_points$gispropnum)) %>% 
-  # addPolygons(data = buff, weight = 1, color="green") %>% 
+   addCircleMarkers(data = access[1514,], color = 'blue', 
+                    radius = 2, weight = 1,
+                    popup = paste(access[1514,]$parkname, access[1514,]$gispropnum)) %>% 
+   
+   addPolygons(data = rj_dissolve, weight = 6, color="green", 
+               popup = paste(rj_dissolve$park_name, rj_dissolve$parknum)) %>% 
   addPolygons(data = tp, weight = 5, popup = tp$park_name) %>% 
  #  addPolygons(data = shape, color = "red", weight = 1)
 
@@ -177,12 +179,53 @@ tp <- rj_dissolve %>% filter(squareft<1)
    rj_dissolve$squareft = convert_sqm_2_sqft(as.numeric(st_area(rj_dissolve)))
    rj_dissolve$test = as.numeric(st_area(rj_dissolve))
 
+   row.names(rj_dissolve)<-NULL
    
    st_write(rj_dissolve, "data/openspace_parks_dissolve.geojson",
             driver='GeoJSON', delete_dsn=TRUE)
 
+# add square footage to access pts ----
+# 50 ft - 15.24m
+sf_access <-  st_join(access, rj_dissolve, join = st_nn, maxdist = 15.24)
+
+st_write(sf_access, "data/sf_access.geojson",
+         driver='GeoJSON', delete_dsn=TRUE) 
+
+
+# map test
+leaflet() %>%
+  # default settings ---------------
+setView(-73.933560,40.704343, zoom = 10.5) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+   # addCircleMarkers(data = wpsa_points[wpsa_points$parkname=="Hunter's Point",], color = 'green', 
+   #                  radius = 4, weight = 1) %>% 
+  # addPolygons(data = buff, weight = 1, color="green") %>% 
+  addPolygons(data = df[453,][1], weight = 1, fillOpacity = 0.5, stroke = F) %>% 
+  addPolygons(color= 'green', data = buff[buff$parknum=="Q306" | buff$parknum=="Q309" | buff$parknum=="B126" | buff$parknum=="X039" | buff$parknum=="Q020" | buff$parknum=="R142" | buff$parknum=="X118",], weight = 3, popup = buff[buff$parknum=="Q306" | buff$parknum=="Q309" | buff$parknum=="B126" | buff$parknum=="X039" | buff$parknum=="Q020" | buff$parknum=="R142" | buff$parknum=="X118",]$parknum) %>% 
+  addCircleMarkers(data = wpsa_points[wpsa_points$gispropnum=="X118",], color = 'orange', radius = 4, weight = 1, popup = paste(wpsa_points[wpsa_points$gispropnum=="X118",]$parkname))  %>% 
+
+  #  addPolygons(data = shape, color = "red", weight = 1)
+ 
+  ct_walk <-   st_read("data/ct_walk.geojson")
+   
 # pluto res ------
 #pluto <- st_read("data/pluto_res_columns.geojson") %>% 
 #  filter(unitsres>0)
 
 #st_write(pluto, "data/pluto_res_only.geojson")
+
+
+buff <- st_read('data/openspace_parks_dissolve.geojson')
+
+# check distribution - extremely skewed
+plot(density(buff$squareft))
+abline(v=median(buff$squareft))
+abline(v=mean(buff$squareft), col='blue')
+
+
+# number of outliers
+length(boxplot(buff$squareft, plot=FALSE)$out)
+# last outlier
+sort(boxplot(buff$squareft, plot=FALSE)$out, decreasing = T)[1]
+# first outlier
+first_out <- sort(boxplot(buff$squareft, plot=FALSE)$out) [1]

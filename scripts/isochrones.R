@@ -7,8 +7,8 @@ library(dplyr)
 library(mapboxapi)
 mb_access_token(my_token, install = TRUE)
 
-strsplit(as.character(access$geometry[1]),",")[[1]][1]
-substr(strsplit(as.character(access$geometry[1]),",")[[1]][1],3,nchar(strsplit(as.character(access$geometry[1]),",")[[1]][1]) )
+access <- st_read("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
+  st_transform("+proj=longlat +datum=WGS84")
     
 isos=list()
 system.time(
