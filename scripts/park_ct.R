@@ -234,7 +234,7 @@ pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 # Covid
 map_sf_zip$numct <- 0
 for (i in unique(map_sf_zip$MODZCTA)){
-  map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- nrow(over(as_Spatial(ct_demo), as_Spatial(subset(map_sf_zip, MODZCTA==i))))
+  map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- nrow(!is.na(over(as_Spatial(ct_demo), as_Spatial(subset(map_sf_zip, MODZCTA==i)))))
 }
 
 
@@ -345,10 +345,11 @@ for (i in parknames){
   }
   # each column says whether or not the census tract has access to the column name park
   nam <- i
-  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
+  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqrt[which(access$NAME==nam)], 0)
 }
 
-
+#st_write(ct_walk, "data/ct_walk.geojson",
+#         driver='GeoJSON', delete_dsn=TRUE)
 
 
 
