@@ -34,7 +34,7 @@ map_walk
 
 # Income Data
 
-ct <- read_sf("2010 Census Tracts/geo_export_8d38b305-5fed-49a0-a548-46435c11e818.shp") %>%
+ct <- read_sf("data/2010 Census Tracts/geo_export_8d38b305-5fed-49a0-a548-46435c11e818.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
 ct$center <- st_centroid(ct$geometry, of_largest_polygon = TRUE)
@@ -94,7 +94,7 @@ ZNYC <- subset(ZCTAtoCT, STATE=="36" & (COUNTY=="05" | COUNTY=="5" | COUNTY=="47
 
 # Crosswalk between zcta and modzcta
 URL_MZtoZ <- "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/Geography-resources/ZCTA-to-MODZCTA.csv"
-MZtoZ <- fread(URL_MZtoZ)
+MZtoZ <- read.csv(URL_MZtoZ)
 MZtoZ <- MZtoZ %>% rename(ZCTA5 = ZCTA)
 MZtoZ[,1:2] <- lapply(MZtoZ[,1:2], as.character)
 
@@ -104,18 +104,19 @@ ZNYC <- ZNYC %>% rename(tract = TRACT)
 ZNYC$tract <- as.character(as.numeric(ZNYC$tract/100))
 ZNYC$boro_code <- str_sub(ZNYC$GEOID,-8,-7) #strip boro code from GEOID
 
-# boro codes are different
-Convertboro <- data.table(Census_boro_code = c('05','47','81','85','61'), 
-                          boro_code=c(2,3,4,5,1), 
-                          boro_name = c("Bronx","Brooklyn","Queens","Staten Island","Manhattan"))
 
-# apply correct boro codes and names
-ZNYC[,c("boro_code","boro_name") := .(lapply(boro_code, function(x) Convertboro[Census_boro_code == x,boro_code]),
-                                      lapply(boro_code, function(x) Convertboro[Census_boro_code == x,boro_name]))][
-                                        ,name := paste0('Census Tract ',tract,', ',boro_name,' Boro')]
+for(i in 1:nrow(ZNYC)){ 
+  if(ZNYC$boro_code[i]=="05") ZNYC$boro_code[i] <- "2"
+  if(ZNYC$boro_code[i]=="81") ZNYC$boro_code[i] <- "4"
+  if(ZNYC$boro_code[i]=="61") ZNYC$boro_code[i] <- "1"
+  if(ZNYC$boro_code[i]=="47") ZNYC$boro_code[i] <- "3"
+  if(ZNYC$boro_code[i]=="85") ZNYC$boro_code[i] <- "5"
+}
 
-
-
+# https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources
+nyczipjson <- read_sf("data/MODZCTA_2010/MODZCTA_2010.shp") %>% 
+  st_transform("+proj=longlat +datum=WGS84")
+map_sf_zip <- st_sf(merge(nyczipjson, C19, by = "MODZCTA"))
 
 
 ########################################################################
@@ -127,7 +128,8 @@ ZNYC[,c("boro_code","boro_name") := .(lapply(boro_code, function(x) Convertboro[
 labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_demo$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_demo$S1901_C01_012E),"</p>",  
-                "<p>",paste0("Population: ",ct_demo$B01003_001E),"</p>")
+                "<p>",paste0("Population: ",ct_demo$B01003_001E),"</p>", 
+                "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>")
 
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -146,6 +148,13 @@ map <- leaflet() %>%
               fillOpacity = 0.5,
               group = "Pop", 
               popup = lapply(labels,HTML)) %>%
+  addPolygons(data=map_sf_zip,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = map_sf_zip$COVID_CASE_RATE)(map_sf_zip$COVID_CASE_RATE),
+              fillOpacity = 0.5,
+              group = "COVID", 
+              popup = lapply(labels,HTML)) %>%
   addPolygons(data=shape, 
               weight=1, 
               group= "Walk") %>%
@@ -158,12 +167,13 @@ map <- leaflet() %>%
              group= "Not Walkable", 
              color="black") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable"),
+    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable", "COVID"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
   hideGroup("Income") %>% 
   hideGroup("Pop") %>% 
   hideGroup("Access") %>% 
-  hideGroup("Center") 
+  hideGroup("Center") %>% 
+  hideGroup("COVID") 
 map
 
 ########################################################################
