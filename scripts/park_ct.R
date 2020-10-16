@@ -129,7 +129,9 @@ labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_demo$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_demo$S1901_C01_012E),"</p>",  
                 "<p>",paste0("Population: ",ct_demo$B01003_001E),"</p>", 
-                "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>")
+                "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
+                "<p>","MODZCTA: ",map_sf_zip$MODZCTA,"</p>", 
+                "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>")
 
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -228,6 +230,12 @@ pop_boro_ins <- subset(ct_demo, ins==0) %>%
 
 pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
 pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
+
+# Covid
+map_sf_zip$numct <- 0
+for (i in unique(map_sf_zip$MODZCTA)){
+  map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- nrow(over(as_Spatial(ct_demo), as_Spatial(subset(map_sf_zip, MODZCTA==i))))
+}
 
 
 ########################################################################
