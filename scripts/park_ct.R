@@ -119,10 +119,11 @@ for (i in unique(map_sf_zip$MODZCTA)){
 
 # 10-Min Walk buffers
 
-iso <- readOGR("data/isochrones_10min_accesspts.geojson")
+iso <- st_read("data/isochrones_10min_accesspts.geojson")
 sqft_pts <- st_read("data/sf_access.geojson")
 
 iso <- cbind(iso, sqft_pts[,c(4:15,17)])
+iso$parkid <- ifelse(!is.na(iso$park_name), as.character(iso$park_name), as.character(iso$parknum))
 
 map_iso <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -135,28 +136,26 @@ map_iso <- leaflet() %>%
              color="red")
 map_iso
 
-test <- subset(iso, is.na(parkname))
-
-map_test <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  # addPolygons(data=test, weight=0.1) %>%
-  # addCircles(data=ct_demo$center,
-  #            group= "Center",
-  #            popup = lapply(labels,HTML)) %>%
-  addCircles(data=subset(access, is.na(parkname) & is.na(gispropnum)),
-             group= "Access",
-             color="red")
-map_test
-sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
+# test <- subset(iso, is.na(parkname))
+# 
+# map_test <- leaflet() %>%
+#   setView(-73.935242,40.730610,10) %>%
+#   addProviderTiles("CartoDB.Positron") %>%
+#   addPolygons(data=test, weight=0.1) %>%
+#   addCircles(data=ct_demo$center,
+#              group= "Center",
+#              popup = lapply(labels,HTML)) %>%
+#   addCircles(data=subset(access, is.na(parkname) & is.na(gispropnum)),
+#              group= "Access",
+#              color="red")
+# map_test
+# sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
 
 ct_walk <- ct_demo
 # name NA park "NA"
-parknames <- ifelse(!is.na(as.character(unique(iso@data$parkname))), 
-                    as.character(unique(iso@data$parkname)), 
-                    ifelse(!is.na(as.character(unique(iso@data$gispropnum))),
-                           as.character(unique(iso@data$gispropnum)), 
-                    ))
+# check!!!
+parknames <- unique(iso$parkid)
+
 iso@data$id <- parknames
 # create column for each park
 ct_walk[, parknames] <- 0 
