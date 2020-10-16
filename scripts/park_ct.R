@@ -20,18 +20,6 @@ access <- read_sf("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e
 shape <- read_sf("data/Walk-to-a-Park Service area/geo_export_f18e18a9-a859-4692-a3e0-48095a41a0d2.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
-map_access <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addCircles(data=access)
-map_access
-
-map_walk <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=shape, weight=1)
-map_walk
-
 # Income Data
 
 ct <- read_sf("data/2010 Census Tracts/geo_export_8d38b305-5fed-49a0-a548-46435c11e818.shp") %>%
@@ -112,7 +100,7 @@ for(i in 1:nrow(ZNYC)){
   if(ZNYC$boro_code[i]=="47") ZNYC$boro_code[i] <- "3"
   if(ZNYC$boro_code[i]=="85") ZNYC$boro_code[i] <- "5"
 }
-ZNYC$boro_ct201 <- substr(ZNYC$GEOID, 5, 11)
+ZNYC$boro_ct201 <- paste0(ZNYC$boro_code, substr(ZNYC$GEOID, 6, 11))
 
 ########################################################################
 
@@ -191,30 +179,39 @@ ct_walk$parktot <- rowSums(st_drop_geometry(ct_walk[,35:918]))
 #st_write(ct_walk, "data/ct_walk.geojson",
 #         driver='GeoJSON', delete_dsn=TRUE)
 
+for (i in 1:nrow(ct_walk)){ 
+  ct_walk$sqft[i] <- round(runif(1, 0, 10000000),0)
+  }
 
 # Aggregate census sqft up to MODZCTA
 Z_sqft <- merge(ZNYC, ct_walk[,c("boro_ct201", "sqft")], by="boro_ct201")
+Z_sqft$sqftpc <- Z_sqft$sqft / Z_sqft$TRPOP
 
 # zcta sqft is weighted average of sqft in each nested tract 
 for (i in unique(Z_sqft$ZCTA5)){
-  Z_sqft[ZCTA5==i,"Z_sqft"] <- sum(Z_sqft[ZCTA5==i,sqft] * 
-                                     Z_sqft[ZCTA5==i,ZPOPPCT]/
-                                     (sum(Z_sqft[which(!is.na(Z_sqft$sqft) & ZCTA5==i),ZPOPPCT]))
+  Z_sqft[Z_sqft$ZCTA5==i,"Z_sqft"] <- sum(Z_sqft[Z_sqft$ZCTA5==i,"sqft"] * 
+                                     Z_sqft[Z_sqft$ZCTA5==i,"ZPOPPCT"]/
+                                     (sum(Z_sqft[which(!is.na(Z_sqft$sqft) & Z_sqft$ZCTA5==i),"ZPOPPCT"]))
                                    , na.rm=TRUE)
-  Z_sqft[ZCTA5==i,"Pop_Add"] <- sum(Z_sqft[ZCTA5==i,POPPT])
+  Z_sqft[Z_sqft$ZCTA5==i,"Z_sqft"] <- ifelse(Z_sqft[Z_sqft$ZCTA5==i,"Z_sqft"]==0, 
+                                             Z_sqft[Z_sqft$ZCTA5==i,"sqft"], 
+                                             Z_sqft[Z_sqft$ZCTA5==i,"Z_sqft"])
+  Z_sqft[Z_sqft$ZCTA5==i,"Pop_Add"] <- sum(Z_sqft[Z_sqft$ZCTA5==i,"POPPT"])
 }
 
-Pop_MZtoZ <- merge(MZtoZ, Z_CDC[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5")
+Pop_MZtoZ <- unique(merge(MZtoZ, Z_sqft[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5"))
 
 for (j in Pop_MZtoZ$MODZCTA){
-  Pop_MZtoZ[MODZCTA==j,"sqft"] <- sum(Pop_MZtoZ[MODZCTA==j,Z_sqft] * 
-                                        Pop_MZtoZ[MODZCTA==j,Pop_Add]/
-                                        (sum(Pop_MZtoZ[MODZCTA==j,Pop_Add]))
+  Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"sqft"] <- sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Z_sqft"] * 
+                                        Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]/
+                                        (sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]))
                                       , na.rm=TRUE)
 }
 
-sqft_mzcta <- st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA"))
-sqft_mzcta$sqftpc <- sqft_mzcta$sqft / sqft_mzcta$POPPT
+sqft_mzcta <- unique(st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA")))
+sqft_mzcta$sqftpc <- ifelse(sqft_mzcta$Pop_Add!=0, 
+                            sqft_mzcta$sqft / sqft_mzcta$Pop_Add, 
+                            NA)
 
 ########################################################################
 
@@ -230,8 +227,10 @@ labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
                 "<p>","MODZCTA: ",map_sf_zip$MODZCTA,"</p>", 
                 "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>", 
                 "<p>","# Census Tracts in MODZCTA: ",map_sf_zip$numct,"</p>", 
-                "<p>","sqft: ",sqft_mzcta$sqft,"</p>", 
-                "<p>","sqft per capita: ",sqft_mzcta$sqftpc,"</p>")
+                "<p>","sqft_m: ",sqft_mzcta$sqft,"</p>", 
+                "<p>","sqft_m per capita: ",sqft_mzcta$sqftpc,"</p>", 
+                "<p>","sqft_c: ",Z_sqft$sqft,"</p>", 
+                "<p>","sqft_c per capita: ",Z_sqft$sqftpc,"</p>")
 
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -257,19 +256,33 @@ map <- leaflet() %>%
               fillOpacity = 0.5,
               group = "COVID", 
               popup = lapply(labels,HTML)) %>%
+  addPolygons(data=Z_sqft,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = Z_sqft$sqft)(Z_sqft$sqft),
+              fillOpacity = 0.5,
+              group = "sqft_c", 
+              popup = lapply(labels,HTML)) %>%
+  addPolygons(data=Z_sqft,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = Z_sqft$sqftpc)(Z_sqft$sqftpc),
+              fillOpacity = 0.5,
+              group = "sqftpc_c", 
+              popup = lapply(labels,HTML)) %>%
   addPolygons(data=sqft_mzcta,
               weight = 1,
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqft)(sqft_mzcta$sqft),
               fillOpacity = 0.5,
-              group = "sqft", 
+              group = "sqft_m", 
               popup = lapply(labels,HTML)) %>%
   addPolygons(data=sqft_mzcta,
               weight = 1,
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqftpc)(sqft_mzcta$sqftpc),
               fillOpacity = 0.5,
-              group = "sqftpc", 
+              group = "sqftpc_m", 
               popup = lapply(labels,HTML)) %>%
   addPolygons(data=shape, 
               weight=1, 
@@ -284,15 +297,17 @@ map <- leaflet() %>%
              color="black") %>%
   addLayersControl(
     overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable", "COVID", 
-                      "sqft", "sqftpc"),
+                      "sqft_c", "sqftpc_c", "sqft_m", "sqftpc_m"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
   hideGroup("Income") %>% 
   hideGroup("Pop") %>% 
   hideGroup("Access") %>% 
   hideGroup("Center") %>% 
   hideGroup("COVID") %>% 
-  hideGroup("sqft") %>% 
-  hideGroup("sqftpc") 
+  hideGroup("sqft_c") %>% 
+  hideGroup("sqftpc_c") %>% 
+  hideGroup("sqft_m") %>% 
+  hideGroup("sqftpc_m") 
 map
 
 ########################################################################
