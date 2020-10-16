@@ -348,6 +348,8 @@ for (i in parknames){
   ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqrt[which(access$NAME==nam)], 0)
 }
 
+ct_walk$parktot <- rowSums(st_drop_geometry(ct_walk[,35:918]))
+
 #st_write(ct_walk, "data/ct_walk.geojson",
 #         driver='GeoJSON', delete_dsn=TRUE)
 
