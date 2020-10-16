@@ -120,6 +120,9 @@ for (i in unique(map_sf_zip$MODZCTA)){
 # 10-Min Walk buffers
 
 iso <- readOGR("data/isochrones_10min_accesspts.geojson")
+sqft_pts <- st_read("data/sf_access.geojson")
+
+iso <- cbind(iso, sf_access[,c(4:15,17)])
 
 map_iso <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
