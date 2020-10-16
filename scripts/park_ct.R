@@ -112,12 +112,109 @@ for(i in 1:nrow(ZNYC)){
   if(ZNYC$boro_code[i]=="47") ZNYC$boro_code[i] <- "3"
   if(ZNYC$boro_code[i]=="85") ZNYC$boro_code[i] <- "5"
 }
+ZNYC$boro_ct201 <- substr(ZNYC$GEOID, 5, 11)
+
+########################################################################
 
 # https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources
 nyczipjson <- read_sf("data/MODZCTA_2010/MODZCTA_2010.shp") %>% 
   st_transform("+proj=longlat +datum=WGS84")
 map_sf_zip <- st_sf(merge(nyczipjson, C19, by = "MODZCTA"))
 
+# Covid
+map_sf_zip$numct <- 0
+for (i in unique(map_sf_zip$MODZCTA)){
+  map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- length(which(!is.na(over(as_Spatial(ct_demo$center), as_Spatial(subset(map_sf_zip, MODZCTA==i)))$MODZCTA)))
+}
+
+########################################################################
+
+# 10-Min Walk buffers
+
+iso <- readOGR("data/isochrones_10min_accesspts.geojson")
+
+map_iso <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=iso, weight=1) %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center") %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red")
+map_iso
+
+test <- subset(iso, is.na(parkname))
+
+map_test <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  # addPolygons(data=test, weight=0.1) %>%
+  # addCircles(data=ct_demo$center,
+  #            group= "Center",
+  #            popup = lapply(labels,HTML)) %>%
+  addCircles(data=subset(access, is.na(parkname) & is.na(gispropnum)),
+             group= "Access",
+             color="red")
+map_test
+sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
+
+ct_walk <- ct_demo
+# name NA park "NA"
+parknames <- ifelse(!is.na(as.character(unique(iso@data$parkname))), 
+                    as.character(unique(iso@data$parkname)), 
+                    ifelse(!is.na(as.character(unique(iso@data$gispropnum))),
+                           as.character(unique(iso@data$gispropnum)), 
+                    ))
+iso@data$id <- parknames
+# create column for each park
+ct_walk[, parknames] <- 0 
+
+for (i in parknames){
+  temp_cens <- ct_demo[0,]
+  # collect the access points for each park
+  for (j in rownames(iso@data[which(iso@data$parkname==i),])){
+    # rows off by 1 for some reason
+    temp_sp <- SpatialPolygons(list(iso@polygons[[as.numeric(j)+1]])) 
+    # make same crs
+    crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
+    # create list of all census tracts within iso of access points to parkname (i)
+    temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
+  }
+  # each column says whether or not the census tract has access to the column name park
+  nam <- i
+  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqrt[which(access$NAME==nam),], 0)
+}
+
+ct_walk$parktot <- rowSums(st_drop_geometry(ct_walk[,35:918]))
+
+#st_write(ct_walk, "data/ct_walk.geojson",
+#         driver='GeoJSON', delete_dsn=TRUE)
+
+
+# Aggregate census sqft up to MODZCTA
+Z_sqft <- merge(ZNYC, ct_walk[,c("boro_ct201", "sqft")], by="boro_ct201")
+
+# zcta sqft is weighted average of sqft in each nested tract 
+for (i in unique(Z_sqft$ZCTA5)){
+  Z_sqft[ZCTA5==i,"Z_sqft"] <- sum(Z_sqft[ZCTA5==i,sqft] * 
+                                     Z_sqft[ZCTA5==i,ZPOPPCT]/
+                                     (sum(Z_sqft[which(!is.na(Z_sqft$sqft) & ZCTA5==i),ZPOPPCT]))
+                                   , na.rm=TRUE)
+  Z_sqft[ZCTA5==i,"Pop_Add"] <- sum(Z_sqft[ZCTA5==i,POPPT])
+}
+
+Pop_MZtoZ <- merge(MZtoZ, Z_CDC[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5")
+
+for (j in Pop_MZtoZ$MODZCTA){
+  Pop_MZtoZ[MODZCTA==j,"sqft"] <- sum(Pop_MZtoZ[MODZCTA==j,Z_sqft] * 
+                                        Pop_MZtoZ[MODZCTA==j,Pop_Add]/
+                                        (sum(Pop_MZtoZ[MODZCTA==j,Pop_Add]))
+                                      , na.rm=TRUE)
+}
+
+sqft_mzcta <- st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA"))
+sqft_mzcta$sqftpc <- sqft_mzcta$sqft / sqft_mzcta$POPPT
 
 ########################################################################
 
@@ -131,7 +228,10 @@ labels <- paste("<h3>","Name: ",ct_demo$NAME, "</h3>",
                 "<p>",paste0("Population: ",ct_demo$B01003_001E),"</p>", 
                 "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
                 "<p>","MODZCTA: ",map_sf_zip$MODZCTA,"</p>", 
-                "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>")
+                "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>", 
+                "<p>","# Census Tracts in MODZCTA: ",map_sf_zip$numct,"</p>", 
+                "<p>","sqft: ",sqft_mzcta$sqft,"</p>", 
+                "<p>","sqft per capita: ",sqft_mzcta$sqftpc,"</p>")
 
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -157,6 +257,20 @@ map <- leaflet() %>%
               fillOpacity = 0.5,
               group = "COVID", 
               popup = lapply(labels,HTML)) %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqft)(sqft_mzcta$sqft),
+              fillOpacity = 0.5,
+              group = "sqft", 
+              popup = lapply(labels,HTML)) %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqftpc)(sqft_mzcta$sqftpc),
+              fillOpacity = 0.5,
+              group = "sqftpc", 
+              popup = lapply(labels,HTML)) %>%
   addPolygons(data=shape, 
               weight=1, 
               group= "Walk") %>%
@@ -169,13 +283,16 @@ map <- leaflet() %>%
              group= "Not Walkable", 
              color="black") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable", "COVID"),
+    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable", "COVID", 
+                      "sqft", "sqftpc"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
   hideGroup("Income") %>% 
   hideGroup("Pop") %>% 
   hideGroup("Access") %>% 
   hideGroup("Center") %>% 
-  hideGroup("COVID") 
+  hideGroup("COVID") %>% 
+  hideGroup("sqft") %>% 
+  hideGroup("sqftpc") 
 map
 
 ########################################################################
@@ -231,127 +348,9 @@ pop_boro_ins <- subset(ct_demo, ins==0) %>%
 pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
 pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 
-# Covid
-map_sf_zip$numct <- 0
-for (i in unique(map_sf_zip$MODZCTA)){
-  map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- nrow(!is.na(over(as_Spatial(ct_demo), as_Spatial(subset(map_sf_zip, MODZCTA==i)))))
-}
-
 
 ########################################################################
 
-# 1/2 Mile buffers
-
-buffer <- readOGR("data/halfmile_buffer_pts.geojson")
-
-map_buffer <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=buffer, weight=1) %>%
-  addCircles(data=ct_demo$center, 
-             group= "Center") %>%
-  addCircles(data=access, 
-             group= "Access", 
-             color="red")
-map_buffer
-
-# test <- subset(buffer, parkname=="East River Park")
-# 
-# map_test <- leaflet() %>%
-#   setView(-73.935242,40.730610,10) %>%
-#   addProviderTiles("CartoDB.Positron") %>%
-#   addPolygons(data=test, weight=0.1) %>%
-#   addCircles(data=ct_demo$center,
-#              group= "Center",
-#              popup = lapply(labels,HTML)) %>%
-#   addCircles(data=access,
-#              group= "Access",
-#              color="red")
-# map_test
-# sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
-
-ct_walk <- ct_demo
-# name NA park "NA"
-parknames <- ifelse(!is.na(as.character(unique(buffer@data$parkname))), as.character(unique(buffer@data$parkname)), "NA")
-# create column for each park
-ct_walk[, parknames] <- 0 
-
-for (i in parknames){
-  temp_cens <- ct_demo[0,]
-  # collect the access points for each park
-  for (j in rownames(buffer@data[which(buffer@data$parkname==i),])){
-    # rows off by 1 for some reason
-    temp_sp <- SpatialPolygons(list(buffer@polygons[[as.numeric(j)+1]])) 
-    # make same crs
-    crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
-    # create list of all census tracts within buffer of access points to parkname (i)
-    temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
-  }
-  # each column says whether or not the census tract has access to the column name park
-  nam <- i
-  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, 1, 0)
-}
-
-
-
-########################################################################
-
-# 10-Min Walk buffers
-
-iso <- readOGR("data/isochrones_10min_accesspts.geojson")
-
-map_iso <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=iso, weight=1) %>%
-  addCircles(data=ct_demo$center, 
-             group= "Center") %>%
-  addCircles(data=access, 
-             group= "Access", 
-             color="red")
-map_iso
-
-test <- subset(iso, parkname=="East River Park")
-
-map_test <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=test, weight=0.1) %>%
-  addCircles(data=ct_demo$center,
-             group= "Center",
-             popup = lapply(labels,HTML)) %>%
-  addCircles(data=access,
-             group= "Access",
-             color="red")
-map_test
-sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
-
-ct_walk <- ct_demo
-# name NA park "NA"
-parknames <- ifelse(!is.na(as.character(unique(iso@data$parkname))), as.character(unique(iso@data$parkname)), "NA")
-# create column for each park
-ct_walk[, parknames] <- 0 
-
-for (i in parknames){
-  temp_cens <- ct_demo[0,]
-  # collect the access points for each park
-  for (j in rownames(iso@data[which(iso@data$parkname==i),])){
-    # rows off by 1 for some reason
-    temp_sp <- SpatialPolygons(list(iso@polygons[[as.numeric(j)+1]])) 
-    # make same crs
-    crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
-    # create list of all census tracts within iso of access points to parkname (i)
-    temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
-  }
-  # each column says whether or not the census tract has access to the column name park
-  nam <- i
-  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqrt[which(access$NAME==nam)], 0)
-}
-
-ct_walk$parktot <- rowSums(st_drop_geometry(ct_walk[,35:918]))
-
-#st_write(ct_walk, "data/ct_walk.geojson",
-#         driver='GeoJSON', delete_dsn=TRUE)
 
 
 
