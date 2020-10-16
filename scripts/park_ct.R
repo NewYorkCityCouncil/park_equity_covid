@@ -122,7 +122,7 @@ for (i in unique(map_sf_zip$MODZCTA)){
 iso <- readOGR("data/isochrones_10min_accesspts.geojson")
 sqft_pts <- st_read("data/sf_access.geojson")
 
-iso <- cbind(iso, sf_access[,c(4:15,17)])
+iso <- cbind(iso, sqft_pts[,c(4:15,17)])
 
 map_iso <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -174,7 +174,7 @@ for (i in parknames){
   }
   # each column says whether or not the census tract has access to the column name park
   nam <- i
-  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqrt[which(access$NAME==nam),], 0)
+  ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, access$sqft[which(access$NAME==nam),], 0)
 }
 
 ct_walk$parktot <- rowSums(st_drop_geometry(ct_walk[,35:918]))
@@ -215,6 +215,7 @@ sqft_mzcta <- unique(st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA")))
 sqft_mzcta$sqftpc <- ifelse(sqft_mzcta$Pop_Add!=0, 
                             sqft_mzcta$sqft / sqft_mzcta$Pop_Add, 
                             NA)
+Z_sqft<- st_sf(Z_sqft)
 
 ########################################################################
 
