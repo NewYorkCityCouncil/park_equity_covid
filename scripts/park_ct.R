@@ -273,18 +273,25 @@ sqft_mzcta<- st_sf(sqft_mzcta)
 
 # Demographics and Within 10-min Walk Overlay
 
-labels <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
+labels_census <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
                 "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>", 
                 "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
                 "<p>","MODZCTA: ",map_sf_zip$MODZCTA,"</p>", 
                 "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>", 
-                "<p>","# Census Tracts in MODZCTA: ",map_sf_zip$numct,"</p>", 
-                "<p>","sqft_m: ",sqft_mzcta$sqft,"</p>", 
-                "<p>","sqft_m per capita: ",sqft_mzcta$sqftpc,"</p>", 
-                "<p>","sqft_c: ",ct_walk$parktot,"</p>", 
-                "<p>","sqft_c per capita: ",ct_walk$parktotpc,"</p>")
+                "<p>","Square feet (tract): ",round(ct_walk$parktot, 0),"</p>", 
+                "<p>","Square feet per capita (tract): ",round(ct_walk$parktotpc, 0),"</p>",
+                "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
+                "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
+
+labels_modzcta <- paste("<h3>","MODZCTA: ",map_sf_zip$MODZCTA,"</h3>", 
+                       "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
+                       "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
+                       "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>",
+                       "<p>","# Census Tracts in MODZCTA: ",map_sf_zip$numct,"</p>", 
+                       "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
+                       "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
 
 map <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -294,15 +301,15 @@ map <- leaflet() %>%
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = ct_walk$S1901_C01_012E)(ct_walk$S1901_C01_012E),
               fillOpacity = 0.5,
-              group = "Income", 
-              popup = lapply(labels,HTML)) %>%
+              group = "Tract Income", 
+              popup = lapply(labels_census,HTML)) %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = ct_walk$B01003_001E)(ct_walk$B01003_001E),
               fillOpacity = 0.5,
-              group = "Pop", 
-              popup = lapply(labels,HTML)) %>%
+              group = "Tract Population", 
+              popup = lapply(labels_census,HTML)) %>%
   addPolygons(data=map_sf_zip,
               weight = 1,
               color = "grey",
@@ -313,31 +320,31 @@ map <- leaflet() %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
-              fillColor = ~colorNumeric("YlOrRd", domain = ct_walk$parktot)(ct_walk$parktot),
+              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktot)(ct_walk$parktot),
               fillOpacity = 0.5,
-              group = "sqft_c",
-              popup = lapply(labels,HTML)) %>%
+              group = "Tract sqft",
+              popup = lapply(labels_census,HTML)) %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
-              fillColor = ~colorNumeric("YlOrRd", domain = ct_walk$parktotpc)(ct_walk$parktotpc),
+              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktotpc)(ct_walk$parktotpc),
               fillOpacity = 0.5,
-              group = "sqftpc_c",
-              popup = lapply(labels,HTML)) %>%
+              group = "Tract sqft per capita",
+              popup = lapply(labels_census,HTML)) %>%
   addPolygons(data=sqft_mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqft)(sqft_mzcta$sqft),
+              fillColor = ~colorQuantile("YlOrRd", domain = sqft_mzcta$sqft)(sqft_mzcta$sqft),
               fillOpacity = 0.5,
-              group = "sqft_m", 
-              popup = lapply(labels,HTML)) %>%
+              group = "MODZCTA sqft", 
+              popup = lapply(labels_modzcta,HTML)) %>%
   addPolygons(data=sqft_mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$sqftpc)(sqft_mzcta$sqftpc),
+              fillColor = ~colorQuantile("YlOrRd", domain = sqft_mzcta$sqftpc)(sqft_mzcta$sqftpc),
               fillOpacity = 0.5,
-              group = "sqftpc_m", 
-              popup = lapply(labels,HTML)) %>%
+              group = "MODZCTA sqft per capita", 
+              popup = lapply(labels_modzcta,HTML)) %>%
   addPolygons(data=shape, 
               weight=1, 
               group= "Walk") %>%
@@ -350,19 +357,22 @@ map <- leaflet() %>%
              group= "Not Walkable", 
              color="black") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Income", "Pop", "Access", "Center", "Not Walkable", "COVID", 
-                      "sqft_c", "sqftpc_c", "sqft_m", "sqftpc_m"),
+    overlayGroups = c("Walk", "Tract Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID", 
+                      "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
-  hideGroup("Income") %>% 
-  hideGroup("Pop") %>% 
+  hideGroup("Walk") %>% 
+  hideGroup("Tract Income") %>% 
+  hideGroup("Tract Population") %>% 
   hideGroup("Access") %>% 
   hideGroup("Center") %>% 
+  hideGroup("Not Walkable") %>% 
   hideGroup("COVID") %>% 
-  hideGroup("sqft_c") %>% 
-  hideGroup("sqftpc_c") %>% 
-  hideGroup("sqft_m") %>% 
-  hideGroup("sqftpc_m") 
+  hideGroup("Tract sqft") %>% 
+  hideGroup("MODZCTA sqft") %>% 
+  hideGroup("MODZCTA sqft per capita") 
 map
+
+saveWidget(map, file = "map.html")
 
 ########################################################################
 
