@@ -10,6 +10,7 @@ library(htmltools)
 library(rgdal)
 library(raster)
 library(stringr)
+library(htmlwidgets)
 
 rm(list=ls())
 
@@ -227,18 +228,11 @@ map_sqft <- leaflet() %>%
 
 map_sqft
 
+saveWidget(map_sqft, file = "map_sqft.html")
 
+########################################################################
 
-
-
-
-
-
-
-
-# for (i in 1:nrow(ct_walk)){ 
-#   ct_walk$squareft[i] <- round(runif(1, 0, 10000000),0)
-#   }
+# MODZCTA aggregation
 
 # Aggregate census sqft up to MODZCTA
 Z_sqft <- merge(ZNYC, ct_walk[,c("boro_ct201", "parktot", "parktotpc")], by="boro_ct201")
