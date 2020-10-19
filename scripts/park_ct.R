@@ -38,6 +38,13 @@ acs5_sub_tract <- getCensus(
   region = "tract:*", 
   regionin = "state:36+county:005,047,081,085,061")
 
+acs5_sub_zip <- getCensus(
+  name = "acs/acs5/subject",
+  vintage = 2018,
+  vars = income_col, 
+  region = "zip code tabulation area:*")
+acs5_sub_zip$ZCTA5 <- acs5_sub_zip$zip_code_tabulation_area
+
 pop_col <- c("NAME", "B01003_001E")
 
 acs5_det_tract <- getCensus(
@@ -46,6 +53,7 @@ acs5_det_tract <- getCensus(
   vars = pop_col, 
   region = "tract:*", 
   regionin = "state:36+county:005,047,081,085,061")
+
 
 acs_tract <- merge(acs5_sub_tract, acs5_det_tract[,c("NAME", "B01003_001E")], by="NAME")
 
@@ -278,7 +286,9 @@ for (i in unique(Z_sqft$ZCTA5)){
   Z_sqft[Z_sqft$ZCTA5==i,"Pop_Add"] <- sum(Z_sqft[Z_sqft$ZCTA5==i,"POPPT"])
 }
 
-Pop_MZtoZ <- unique(merge(MZtoZ, Z_sqft[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5"))
+Pop_MZtoZ_sqft <- unique(merge(MZtoZ, Z_sqft[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5"))
+Pop_MZtoZ <- unique(merge(Pop_MZtoZ_sqft, acs5_sub_zip[,c("ZCTA5", "S1901_C01_012E")], by="ZCTA5"))
+Pop_MZtoZ$S1901_C01_012E <- ifelse(Pop_MZtoZ$S1901_C01_012E<=0, NA, Pop_MZtoZ$S1901_C01_012E)
 
 for (j in Pop_MZtoZ$MODZCTA){
   Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"sqft"] <- sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Z_sqft"] * 
@@ -286,6 +296,10 @@ for (j in Pop_MZtoZ$MODZCTA){
                                         (sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]))
                                       , na.rm=TRUE)
   Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add_MODZCTA"] <- sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"])
+  Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"MedInc"] <- sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"S1901_C01_012E"] * 
+                                              Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]/
+                                              (sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]))
+                                            , na.rm=TRUE)
 }
 
 sqft_mzcta <- unique(st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA")))
@@ -311,7 +325,8 @@ labels_modzcta <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>",
                        "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
                        "<p>","COVID19 Case Rate: ",sqft_mzcta$COVID_CASE_RATE,"</p>", 
                        "<p>","Neighborhood: ",sqft_mzcta$NEIGHBORHOOD_NAME,"</p>",
-                       "<p>","# Census Tracts in MODZCTA: ",sqft_mzcta$numct,"</p>", 
+                       "<p>","Median Income: ",sqft_mzcta$MedInc,"</p>", 
+                       "<p>","# Census Tracts in MODZCTA: ",sqft_mzcta$numct,"</p>",
                        "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
                        "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
 
@@ -338,6 +353,13 @@ map <- leaflet() %>%
               fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$COVID_CASE_RATE)(sqft_mzcta$COVID_CASE_RATE),
               fillOpacity = 0.5,
               group = "COVID Case Rate", 
+              popup = lapply(labels_modzcta,HTML)) %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$MedInc)(sqft_mzcta$MedInc),
+              fillOpacity = 0.5,
+              group = "Median Income", 
               popup = lapply(labels_modzcta,HTML)) %>%
   addPolygons(data=ct_walk,
               weight = 1,
@@ -380,7 +402,7 @@ map <- leaflet() %>%
              color="black") %>%
   addLayersControl(
     overlayGroups = c("Walk", "Tract Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID Case Rate", 
-                      "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
+                      "Median Income", "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
   hideGroup("Walk") %>% 
   hideGroup("Tract Income") %>% 
@@ -458,16 +480,33 @@ pop_boro
 # side by side map and plot of covid and sqftpc
 
 
-mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "sqft", "sqftpc")])), by="MODZCTA")
+mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "MedInc", "sqft", "sqftpc")])), by="MODZCTA")
+mzcta$rankccr <- rank(mzcta$COVID_CASE_RATE)
+mzcta$ranksqft <- rank(mzcta$sqftpc)
+mzcta$rankinc <- rank(mzcta$MedInc)
+
 
 #write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
 
-ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() 
+ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point()
+ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point()
 
-ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
+  geom_point() +
+  facet_wrap(~BOROUGH_GROUP)
 cor(log(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
 
-ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
+  geom_point() + 
+  labs(
+    title = "Park Equity: Square Feet Per Capita and COVID19 Case Rate by Borough",
+    x = "Least to Most Square Feet Per Capita (Rank)",
+    y = "COVID19 Case Rate", 
+    color = "Borough"
+  ) +
+  facet_wrap(~BOROUGH_GROUP, nrow=1) + 
+  theme_bw() + 
+  theme(legend.position = "none")
 cor(rank(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
 
 ggplot(mzcta, aes(x=log(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
@@ -479,4 +518,85 @@ cor(rank(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
 
 # Income
 
+ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) + 
+  geom_point() + 
+  labs(
+    title = "Park Equity: Square Feet Per Capita and Median Income by Borough",
+    x = "Least to Most Square Feet Per Capita (Rank)",
+    y = "Median Income", 
+    color = "Borough"
+  ) +
+  facet_wrap(~BOROUGH_GROUP, nrow=1) + 
+  theme_bw() + 
+  theme(legend.position = "none")
+
+
+labels_compare <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>", 
+                        "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
+                        "<p>","Neighborhood: ",sqft_mzcta$NEIGHBORHOOD_NAME,"</p>",
+                        "<p>","COVID19 Case Rate: ",round(sqft_mzcta$COVID_CASE_RATE, 0),"</p>", 
+                        "<p>","Median Income: ",round(sqft_mzcta$MedInc, 0),"</p>",
+                        "<p>","Square feet per capita: ",round(sqft_mzcta$sqftpc, 0),"</p>")
+
+pal_sqftpc_m <- colorBin(
+  palette = "YlGn",
+  domain = sqft_mzcta$sqftpc, 
+  bins = ceiling(quantile(sqft_mzcta$sqftpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+
+pal_covid_m <- colorBin(
+  palette = "YlGn",
+  domain = sqft_mzcta$COVID_CASE_RATE, 
+  bins = ceiling(quantile(sqft_mzcta$COVID_CASE_RATE, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+
+pal_inc_m <- colorBin(
+  palette = "YlGn",
+  domain = sqft_mzcta$MedInc, 
+  bins = ceiling(quantile(sqft_mzcta$MedInc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+
+
+map_compare <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_covid_m(sqft_mzcta$COVID_CASE_RATE),
+              fillOpacity = 0.5,
+              group = "COVID Case Rate", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_inc_m(sqft_mzcta$MedInc),
+              fillOpacity = 0.5,
+              group = "Median Income", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_sqftpc_m(sqft_mzcta$sqftpc),
+              fillOpacity = 0.5,
+              group = "Square feet per capita", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addLayersControl(
+    overlayGroups = c("COVID Case Rate", "Median Income", "Square feet per capita"),
+    options = layersControlOptions(collapsed = FALSE))  %>%
+  addLegend(pal = pal_covid_m, values = sqft_mzcta$COVID_CASE_RATE,
+           group = "COVID Case Rate", 
+           position = "bottomright") %>%
+  addLegend(pal = pal_inc_m, values = sqft_mzcta$MedInc,
+          group = "Median Income",
+          position = "bottomright") %>%
+  addLegend(pal = pal_sqftpc_m, values = sqft_mzcta$sqftpc,
+            group = "Square feet per capita",
+            position = "bottomright") %>%
+  hideGroup("COVID Case Rate") %>% 
+  hideGroup("Median Income") %>% 
+  hideGroup("Square feet per capita") 
+map_compare
+
+saveWidget(map_compare, file = "map_compare.html")
 
