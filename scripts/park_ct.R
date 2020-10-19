@@ -191,9 +191,11 @@ ct_walk$parktotpc <- round(ct_walk$parktot / ct_walk$B01003_001E, 2)
 # st_write(ct_walk[, c(1:6,18,20,23,28,29,30,31,1262,1263)], 
 #          "data/ct_walk.geojson",
 #          driver='GeoJSON', delete_dsn=TRUE)
-# 
+#
 # writeOGR(as(ct_walk[, c(1:6,18,20,23,28,29,30,31,1262,1263)], 'Spatial'), dsn="data/ct_walk",
 #          "ct_walk", driver="ESRI Shapefile", overwrite_layer =TRUE)
+# 
+# zip(zipfile = 'data/ct_walk', files = dir('data/ct_walk/', full.names = TRUE))
 
 labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
