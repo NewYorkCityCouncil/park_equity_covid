@@ -11,6 +11,7 @@ library(rgdal)
 library(raster)
 library(stringr)
 library(htmlwidgets)
+library(RSocrata)
 
 rm(list=ls())
 
@@ -197,6 +198,12 @@ ct_walk$parktotpc <- round(ct_walk$parktot / ct_walk$B01003_001E, 2)
 # 
 # zip(zipfile = 'data/ct_walk', files = dir('data/ct_walk/', full.names = TRUE))
 
+
+openspace <- readOGR("data/openspace_parks_dissolve.geojson")
+
+
+puma <- readOGR("data/Public Use Microdata Areas (PUMA).geojson")
+
 labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
@@ -204,27 +211,49 @@ labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>","sqft: ",round(ct_walk$parktot, 0),"</p>", 
                 "<p>","sqft per capita: ",round(ct_walk$parktotpc, 0),"</p>")
 
+pal_sqft <- colorBin(
+  palette = "YlGn",
+  domain = ct_walk$parktot,
+  bins = ceiling(quantile(ct_walk$parktot, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+pal_sqftpc <- colorBin(
+  palette = "YlGn",
+  domain = ct_walk$parktotpc, 
+  bins = ceiling(quantile(ct_walk$parktotpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+
 map_sqft <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktot, n=9)(ct_walk$parktot),
+              fillColor = ~pal_sqft(ct_walk$parktot),
               fillOpacity = 0.5, 
               group = "Square Footage", 
               popup = lapply(labels_sqft,HTML)) %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktotpc, n=9)(ct_walk$parktotpc),
+              fillColor = ~pal_sqftpc(ct_walk$parktotpc),
               fillOpacity = 0.5,
               group = "Square Footage Per Capita", 
               popup = lapply(labels_sqft,HTML)) %>%
+  addPolylines(data=puma, weight=0.5, color="black") %>%
+  addPolygons(data=openspace, 
+              color="green",
+              group = "Open Space") %>%
+  # addLegend(pal = pal_sqft, values = ct_walk$parktot,
+  #           group = "Square Footage", 
+  #           position = "bottomright") %>%
+  addLegend(pal = pal_sqftpc, values = ct_walk$parktotpc,
+            group = "Square Footage Per Capita",
+            position = "bottomright") %>%
   addLayersControl(
-    overlayGroups = c("Square Footage", "Square Footage Per Capita"),
+    overlayGroups = c("Square Footage Per Capita", "Open Space"),
     options = layersControlOptions(collapsed = FALSE))%>% 
-  hideGroup("Square Footage")
+#  hideGroup("Square Footage") %>% 
+  hideGroup("Open Space")
 
 map_sqft
 
@@ -431,7 +460,7 @@ pop_boro
 
 mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "sqft", "sqftpc")])), by="MODZCTA")
 
-write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
+#write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
 
 ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() 
 
