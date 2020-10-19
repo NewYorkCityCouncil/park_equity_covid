@@ -315,8 +315,8 @@ map <- leaflet() %>%
               color = "grey",
               fillColor = ~colorBin("YlOrRd", domain = map_sf_zip$COVID_CASE_RATE)(map_sf_zip$COVID_CASE_RATE),
               fillOpacity = 0.5,
-              group = "COVID", 
-              popup = lapply(labels,HTML)) %>%
+              group = "COVID Case Rate", 
+              popup = lapply(labels_modzcta,HTML)) %>%
   addPolygons(data=ct_walk,
               weight = 1,
               color = "grey",
@@ -357,7 +357,7 @@ map <- leaflet() %>%
              group= "Not Walkable", 
              color="black") %>%
   addLayersControl(
-    overlayGroups = c("Walk", "Tract Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID", 
+    overlayGroups = c("Walk", "Tract Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID Case Rate", 
                       "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
     options = layersControlOptions(collapsed = FALSE)) %>% 
   hideGroup("Walk") %>% 
@@ -366,7 +366,7 @@ map <- leaflet() %>%
   hideGroup("Access") %>% 
   hideGroup("Center") %>% 
   hideGroup("Not Walkable") %>% 
-  hideGroup("COVID") %>% 
+  hideGroup("COVID Case Rate") %>% 
   hideGroup("Tract sqft") %>% 
   hideGroup("MODZCTA sqft") %>% 
   hideGroup("MODZCTA sqft per capita") 
@@ -412,6 +412,7 @@ ct_boro_ins <- subset(ct_demo, ins==0) %>%
 
 ct_boro <- merge(ct_boro_total, ct_boro_ins, by="boro_name")
 ct_boro$perc_ct <- ct_boro$outside/ct_boro$total
+ct_boro
 
 # Population summary data
 pop_boro_total <- ct_demo %>%
@@ -426,6 +427,7 @@ pop_boro_ins <- subset(ct_demo, ins==0) %>%
 
 pop_boro <- merge(pop_boro_total, pop_boro_ins, by="boro_name")
 pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
+pop_boro
 
 
 ########################################################################
@@ -434,5 +436,18 @@ pop_boro$perc_pop <- pop_boro$outside/pop_boro$total
 # side by side map and plot of covid and sqftpc
 
 
+mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "sqft", "sqftpc")])), by="MODZCTA")
 
+ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() 
 
+ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+cor(log(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
+
+ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+cor(rank(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
+
+ggplot(mzcta, aes(x=log(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+cor(log(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
+
+ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
+cor(rank(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
