@@ -200,9 +200,7 @@ ct_walk$parktotpc <- round(ct_walk$parktot / ct_walk$B01003_001E, 2)
 labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
-                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>", 
-                "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
-                "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>",
+                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
                 "<p>","sqft: ",round(ct_walk$parktot, 0),"</p>", 
                 "<p>","sqft per capita: ",round(ct_walk$parktotpc, 0),"</p>")
 
@@ -276,20 +274,15 @@ sqft_mzcta<- st_sf(sqft_mzcta)
 labels_census <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
                 "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
                 "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
-                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>", 
-                "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
-                "<p>","MODZCTA: ",map_sf_zip$MODZCTA,"</p>", 
-                "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>", 
+                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
                 "<p>","Square feet (tract): ",round(ct_walk$parktot, 0),"</p>", 
-                "<p>","Square feet per capita (tract): ",round(ct_walk$parktotpc, 0),"</p>",
-                "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
-                "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
+                "<p>","Square feet per capita (tract): ",round(ct_walk$parktotpc, 0),"</p>")
 
-labels_modzcta <- paste("<h3>","MODZCTA: ",map_sf_zip$MODZCTA,"</h3>", 
+labels_modzcta <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>", 
                        "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
-                       "<p>","COVID19 Case Rate: ",map_sf_zip$COVID_CASE_RATE,"</p>", 
-                       "<p>","Neighborhood: ",map_sf_zip$NEIGHBORHOOD_NAME,"</p>",
-                       "<p>","# Census Tracts in MODZCTA: ",map_sf_zip$numct,"</p>", 
+                       "<p>","COVID19 Case Rate: ",sqft_mzcta$COVID_CASE_RATE,"</p>", 
+                       "<p>","Neighborhood: ",sqft_mzcta$NEIGHBORHOOD_NAME,"</p>",
+                       "<p>","# Census Tracts in MODZCTA: ",sqft_mzcta$numct,"</p>", 
                        "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
                        "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
 
@@ -310,10 +303,10 @@ map <- leaflet() %>%
               fillOpacity = 0.5,
               group = "Tract Population", 
               popup = lapply(labels_census,HTML)) %>%
-  addPolygons(data=map_sf_zip,
+  addPolygons(data=sqft_mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = map_sf_zip$COVID_CASE_RATE)(map_sf_zip$COVID_CASE_RATE),
+              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$COVID_CASE_RATE)(sqft_mzcta$COVID_CASE_RATE),
               fillOpacity = 0.5,
               group = "COVID Case Rate", 
               popup = lapply(labels_modzcta,HTML)) %>%
@@ -453,3 +446,8 @@ cor(log(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
 
 ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
 cor(rank(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
+
+
+# Income
+
+
