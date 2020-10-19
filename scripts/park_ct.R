@@ -438,7 +438,7 @@ pop_boro
 
 mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "sqft", "sqftpc")])), by="MODZCTA")
 
-#write.csv(mzcta, "data/mzcta")
+write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
 
 ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point() 
 
