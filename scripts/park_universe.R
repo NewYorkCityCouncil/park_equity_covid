@@ -4,170 +4,94 @@ library(dplyr)
 library(leaflet)
 library(nngeo)
 
-
+options(scipen = 999)
 
 # open space (parks) -----------
-r <- st_read("https://data.cityofnewyork.us/api/geospatial/g84h-jbjm?method=export&format=GeoJSON") 
-  
-r_shp <- st_read('data/OpenSpace/geo_export_731ca47d-b06c-49f3-811d-c1d13862f1b9.shp') 
-  
-
-
-r$parknum <- as.character(r$parknum)
-
+openspace <- st_read('data/OpenSpace/geo_export_731ca47d-b06c-49f3-811d-c1d13862f1b9.shp', stringsAsFactors = FALSE) %>% 
+  st_transform("+proj=longlat +datum=WGS84")
 
 # park properties -----------
 
-r1 <- st_read("https://data.cityofnewyork.us/api/geospatial/enfh-gkve?method=export&format=GeoJSON")
+parksprop <- st_read('data/Parks_Properties/geo_export_632341e5-8301-4355-a485-4185d449492d.shp', stringsAsFactors = FALSE) %>%
+  st_transform("+proj=longlat +datum=WGS84")
 
-# add park properties details to open space file --------
+# add park properties details to open space file  --------
+# check - sort(table(parksprop$gispropnum),decreasing = T)[1:10]
+pp<- parksprop %>% as.data.frame() %>% select(!geometry)
 
-r1$omppropid <- as.character(r1$omppropid)
-length(unique(r1$globalid)) == nrow(r1)
-
-r1df<- r1 %>% as.data.frame() %>% select(!geometry)
-
-length(unique(r$source_id)) == nrow(r)
-#[1] 12491
-
-rj<- left_join(r,r1df, by = c("parknum"="omppropid")) %>% 
+park_universe<- left_join(openspace, pp, 
+                          by = c("parknum"="omppropid"), 
+                          keep=T) %>% 
   filter(!duplicated(source_id)) %>% 
   mutate(uid = paste0(source_id, globalid))
 
-# fill in 
-rna<-r[which(is.na(rj$parknum==T)),]
-# map to see what/where are they
-# leaflet() %>%
-#   # default settings ---------------
-# setView(-73.933560,40.704343, zoom = 10.5) %>%
-#   addProviderTiles("CartoDB.Positron") %>% 
-#   addPolygons(data = rna, fillOpacity = 0.5, fillColor = "blue",   
-#               stroke = T, popup = rna$feat_code)
 
-w1 <- which(is.na(rj$system)==T)
-
-
-# get park feature codes -----
+# get park feature codes for open space -----
 # https://github.com/CityOfNewYork/nyc-planimetrics/blob/master/Capture_Rules.md#open-space-attributes
 
 pf <- read.csv("data/park_features.csv", stringsAsFactors = F) %>% 
   janitor::clean_names()
-rj$feat_code <- as.integer(as.character(rj$feat_code))
-rj <- rj %>% left_join(pf, by = c("feat_code"="feature_code"))
 
-rj$landuse <- as.character(rj$landuse)
-rj[is.na(rj$landuse)==T,]$landuse <- rj[is.na(rj$landuse)==T,]$subtype
+park_universe <- park_universe %>% 
+  left_join(pf, by = c("feat_code"="feature_code"))
+
+# fill in missing land use with subtype
+park_universe[is.na(park_universe$landuse)==T,]$landuse <- park_universe[is.na(park_universe$landuse)==T,]$subtype
 
 
-# check duplicated ones ------
-#rj_dup <- left_join(r,r1df, by = c("parknum"="omppropid")) 
-#rj_dup<- rj_dup[duplicated(rj_dup$source_id),]
+# add park features not found in open space --------
+rdf<- openspace %>% as.data.frame() %>% select(!geometry)
 
-# list not found in one or the other ------
-rdf<- r %>% as.data.frame() %>% select(!geometry)
-
-rj1<- left_join(r1,rdf, by=c("omppropid"="parknum")) %>% 
+rj1<- left_join(parksprop,rdf, by=c("gispropnum"="parknum"), keep=T) %>% 
   filter(!duplicated(globalid)) %>% 
   mutate(uid = paste0(source_id, globalid))
 
-innr <- inner_join(r,r1df, by=c("parknum"="omppropid"))
-innr$uid <- paste0(innr$source_id, innr$globalid)
-innr<- innr[!duplicated(innr$uid),]
+innr1 <- inner_join(parksprop,rdf, by=c("gispropnum"="parknum")) %>% 
+  filter(!duplicated(globalid)) %>% 
+  mutate(uid = paste0(source_id, globalid))
 
-innr1 <- inner_join(r1,rdf, by=c("omppropid"="parknum"))
-innr1$uid <- paste0(innr1$source_id, innr1$globalid)
-innr1<- innr1[!duplicated(innr1$globalid),]
+pp_minus_innr1 <- rj1[which(rj1$uid%in%innr1$uid==F),]
 
-r_minus_innr <- rj[which(rj$uid%in%innr$uid==F),]
-r1_minus_innr1 <- rj1[which(rj1$uid%in%innr1$uid==F),]
+## reorder columns to rbind
+pp_minus_innr1$subtype <- rep(NA, nrow(pp_minus_innr1))
+pp_minus_innr1 <- pp_minus_innr1[,c(36:45,1:35,48,46)]
+
+park_universe <- park_universe %>% select(!uid)
+
+#test<-cbind(names(park_universe), names(pp_minus_innr1))
+
+park_universe <- rbind(park_universe, pp_minus_innr1)
 
 # clean
-rj$landuse <- gsub("Tracking Only", "Tracking", rj$landuse) 
-
-# waterfront properties ----------
-
-paws <- st_read('https://data.cityofnewyork.us/api/geospatial/6gxz-3w49?method=export&format=GeoJSON')
-
-wpaas <- st_read('https://data.cityofnewyork.us/api/geospatial/6xi4-k8fe?method=export&format=GeoJSON')
-
-wpaas_access <- st_read('https://data.cityofnewyork.us/api/geospatial/jadt-art9?method=export&format=GeoJSON')
-
-wpaas_fp<- st_read("https://data.cityofnewyork.us/api/geospatial/3bx4-hha8?method=export&format=GeoJSON")
-
-public_wf <- st_read('https://data.cityofnewyork.us/api/geospatial/r2c6-8tqb?method=export&format=GeoJSON')
-
-fish <- st_read("https://data.cityofnewyork.us/api/geospatial/dz88-g4k3?method=export&format=GeoJSON")
+park_universe$landuse <- gsub("Tracking Only", "Tracking", 
+                              park_universe$landuse) 
 
 
+# there are rows for subfeatures within a main feature, dissolve
+  # length(which(is.na(park_universe$parknum)==T)) --------
 
+# fill-in missing parknum
+park_universe[is.na(park_universe$parknum)==T,]$parknum <- 
+  park_universe[is.na(park_universe$parknum)==T,]$gispropnum 
 
-# park  districts -------
-
-pd <- st_read("https://data.cityofnewyork.us/api/geospatial/mebz-ditc?method=export&format=GeoJSON")
-
-# park sectors
-
-ps <- st_read("https://data.cityofnewyork.us/api/geospatial/t4re-ksn6?method=export&format=GeoJSON")
-
-# park zones
-
-pz <- st_read("https://nycopendata.socrata.com/api/geospatial/4j29-i5ry?method=export&format=GeoJSON")
-
-
-
-# walk to a park service area ----
-wpsa_points <- st_read("https://data.cityofnewyork.us/api/geospatial/5vb5-y6cv?method=export&format=GeoJSON")  %>% 
-  filter(!type=="1/4 MILE AND 1/2 MILE SERVED AREA")
-
-wpsa_area<- st_read('https://data.cityofnewyork.us/api/geospatial/rg6q-zak8?method=export&format=GeoJSON')
-
-
-# there are rows for subfeatures within a main feature, using parknum and the largest shape area to select the main features 
-length(which(is.na(rj$parknum)==T))
-ff <- rj %>% 
-  group_by(parknum) %>%
-  top_n(1, abs(as.integer(as.character(shape_area))))
-
-# test
- tt <- rj %>% filter(parknum=="BS29")
-
-# join open space features to wpsa points ----
-# map test
-leaflet() %>%
-  # default settings ---------------
-setView(-73.933560,40.704343, zoom = 10.5) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-   addCircleMarkers(data = access[1514,], color = 'blue', 
-                    radius = 2, weight = 1,
-                    popup = paste(access[1514,]$parkname, access[1514,]$gispropnum)) %>% 
-   
-   addPolygons(data = rj_dissolve, weight = 6, color="green", 
-               popup = paste(rj_dissolve$park_name, rj_dissolve$parknum)) %>% 
-  addPolygons(data = tp, weight = 5, popup = tp$park_name) %>% 
- #  addPolygons(data = shape, color = "red", weight = 1)
-
-buff <- st_read("data/halfmile_buffer_pts.geojson")
-tp <- rj_dissolve %>% filter(squareft<1) 
- 
-# join dissolve parks
- rj_dissolve <- rj %>% 
-   select(shape_area, parknum, park_name,landuse, jurisdiction, location, 
-          typecategory, name311, subcategory, acquisitiondate, subtype) %>% 
+ park_universe_final <- park_universe %>% 
+   select(shape_area, parknum, park_name,landuse, jurisdicti, location, 
+          typecatego, name311, subcategor, acquisitio, subtype) %>% 
    group_by(parknum) %>% 
    summarize(park_name = first(park_name),
              shape_area = max(as.numeric(shape_area)),
              landuse = paste(unique(landuse), collapse = ", "),
-             jurisdiction = paste(unique(jurisdiction), collapse = ", "),
+             jurisdicti = paste(unique(jurisdicti), collapse = ", "),
              location = paste(unique(location), collapse = ", "),
-             typecategory = paste(unique(typecategory), collapse = ", "),
+             typecatego = paste(unique(typecatego), collapse = ", "),
              name311 = paste(unique(name311), collapse = ", "),
-             subcategory = paste(unique(subcategory), collapse = ", "),
-             acquisitiondate = paste(unique(acquisitiondate), collapse = ", "),
+             subcategor = paste(unique(subcategor), collapse = ", "),
+             acquisitio = paste(unique(acquisitio), collapse = ", "),
              subtype = paste(unique(subtype), collapse = ", ")) 
    
- # to square foot
+ # get square footage ---------
  
- #st_area(rj_dissolve)[1]
+ #st_area(park_universe_final)[1]
  #1971.664 [m^2]
  # https://rpubs.com/oaxacamatt/sqm_2_sqft
  convert_sqm_2_sqft <- function(sq_meters){
@@ -176,37 +100,67 @@ tp <- rj_dissolve %>% filter(squareft<1)
    return(sq_meters * sqft_per_sqm)
  }
  
-   rj_dissolve$squareft = convert_sqm_2_sqft(as.numeric(st_area(rj_dissolve)))
-   rj_dissolve$test = as.numeric(st_area(rj_dissolve))
+park_universe_final$squareft <- 
+  convert_sqm_2_sqft(as.numeric(st_area(park_universe_final)))
+#park_universe_final$test = as.numeric(st_area(park_universe_final))
 
-   row.names(rj_dissolve)<-NULL
-   
-   st_write(rj_dissolve, "data/openspace_parks_dissolve.geojson",
+row.names(park_universe_final)<-NULL
+
+st_write(park_universe_final, "data/openspace_parks_dissolve.geojson",
             driver='GeoJSON', delete_dsn=TRUE)
 
 # add square footage to access pts ----
 # 50 ft - 15.24m
-sf_access <-  st_join(access, rj_dissolve, join = st_nn, maxdist = 15.24)
 
-st_write(sf_access, "data/sf_access.geojson",
+# walk to a park service area ----
+access <- st_read("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
+  st_transform("+proj=longlat +datum=WGS84")
+
+# waterfront properties ---------- have sf already
+wf <- st_read("data/Waterfront/geo_export_3a9b8ad8-00be-4d92-ad09-16ab27adcb34.shp") %>%
+  st_transform("+proj=longlat +datum=WGS84") %>% 
+  filter(status=="Open") %>% 
+  select(name, wpaa_area, wpaa_id, geometry)
+
+pow <- st_read("data/publiclyownedwaterfront/geo_export_accfbd3e-51d3-4589-807c-67f728e5026f.shp") %>%
+  st_transform("+proj=longlat +datum=WGS84")
+
+
+# to aviod running the whole st_join which takes awhile, ran the ones that didnt match with the new features added
+tt1<- st_read("data/sf_access.geojson") %>% 
+  select(!test)
+
+
+sf2<- st_join(access[which(is.na(tt1$squareft)==T),], 
+              park_universe_final, join = st_nn, maxdist = 15.24)
+names(sf2) <- names(tt1)
+tt1[which(is.na(tt1$squareft)==T),] <-sf2
+
+sf3<- st_join(access[which(is.na(tt1$squareft)==T),], 
+              pow, join = st_nn, maxdist = 15.24)
+names(sf3)[names(sf3)=="agency"] <- "jurisdiction"
+names(sf3)[names(sf3)=="name"] <- "park_name"
+names(sf3)[names(sf3)=="shape_star"] <- "squareft"
+sf3$parknum <- rep(NA, nrow(sf3))
+sf3$shape_area <- rep(NA, nrow(sf3))
+sf3$landuse <- rep(NA, nrow(sf3))
+sf3$location <- rep(NA, nrow(sf3))
+sf3$typecategory <- rep("Waterfront", nrow(sf3))
+sf3$name311 <- sf3$park_name
+sf3$subcategory <- rep("Waterfront", nrow(sf3))
+sf3$acquisitiondate <- rep(NA, nrow(sf3))
+sf3$subtype <- rep("Waterfront", nrow(sf3))
+sf3<- sf3 %>% select(!link)
+sf3<- sf3 %>% select(!shape_stle)
+sf3<- sf3 %>% select(gispropnum, parkname, type, parknum, park_name, shape_area, landuse, jurisdiction, location, typecategory, name311, subcategory, acquisitiondate, subtype, squareft, geometry)
+
+tt1[which(is.na(tt1$squareft)==T),] <-sf3
+
+
+# sf_access <-  st_join(access, park_universe_final, join = st_nn, maxdist = 15.24)
+
+st_write(tt1, "data/sf_access.geojson",
          driver='GeoJSON', delete_dsn=TRUE) 
-
-
-# map test
-leaflet() %>%
-  # default settings ---------------
-setView(-73.933560,40.704343, zoom = 10.5) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-   # addCircleMarkers(data = wpsa_points[wpsa_points$parkname=="Hunter's Point",], color = 'green', 
-   #                  radius = 4, weight = 1) %>% 
-  # addPolygons(data = buff, weight = 1, color="green") %>% 
-  addPolygons(data = df[453,][1], weight = 1, fillOpacity = 0.5, stroke = F) %>% 
-  addPolygons(color= 'green', data = buff[buff$parknum=="Q306" | buff$parknum=="Q309" | buff$parknum=="B126" | buff$parknum=="X039" | buff$parknum=="Q020" | buff$parknum=="R142" | buff$parknum=="X118",], weight = 3, popup = buff[buff$parknum=="Q306" | buff$parknum=="Q309" | buff$parknum=="B126" | buff$parknum=="X039" | buff$parknum=="Q020" | buff$parknum=="R142" | buff$parknum=="X118",]$parknum) %>% 
-  addCircleMarkers(data = wpsa_points[wpsa_points$gispropnum=="X118",], color = 'orange', radius = 4, weight = 1, popup = paste(wpsa_points[wpsa_points$gispropnum=="X118",]$parkname))  %>% 
-
-  #  addPolygons(data = shape, color = "red", weight = 1)
- 
-  ct_walk <-   st_read("data/ct_walk.geojson")
    
 # pluto res ------
 #pluto <- st_read("data/pluto_res_columns.geojson") %>% 
@@ -215,17 +169,42 @@ setView(-73.933560,40.704343, zoom = 10.5) %>%
 #st_write(pluto, "data/pluto_res_only.geojson")
 
 
-buff <- st_read('data/openspace_parks_dissolve.geojson')
+tt1$uid<- paste(tt1$gispropnum, tt1$parkname, tt1$parknum, tt1$park_name, sep = " ")
+
+tt2 <- tt1[!duplicated(tt1$uid),]
+
+tt3 <- tt2 %>% filter(typecategory=="Community Park" | typecategory=="	Neighborhood Park")
+tt4 <- tt2 %>% filter(typecategory=="NA" | typecategory=="Triangle/Plaza")
 
 # check distribution - extremely skewed
-plot(density(buff$squareft))
-abline(v=median(buff$squareft))
-abline(v=mean(buff$squareft), col='blue')
+plot(density(log10(tt2$squareft),na.rm = T))
+abline(v=median(log10(tt2$squareft), na.rm=T))
+abline(v=mean(log10(tt2$squareft),  na.rm = T), col='blue')
+
+qqnorm(log10(tt2$squareft), pch = 1, frame = FALSE)
+qqline(log10(tt2$squareft), pch = 1, frame = FALSE)
+library(ggpubr)
+tt2$log<- log10(tt2$squareft)
+ggqqplot(tt2, x = "log") +
+  scale_x_continuous(breaks = seq(-3,3,.5),
+                     labels = seq(-3,3,.5))
+
+quantile(tt2$log, na.rm = T, seq(0, 1, by=.1))
 
 
 # number of outliers
-length(boxplot(buff$squareft, plot=FALSE)$out)
+length(boxplot(tt$squareft, plot=FALSE)$out)
 # last outlier
-sort(boxplot(buff$squareft, plot=FALSE)$out, decreasing = T)[1]
+sort(boxplot(tt$squareft, plot=FALSE)$out, decreasing = T)[1]
 # first outlier
 first_out <- sort(boxplot(buff$squareft, plot=FALSE)$out) [1]
+
+
+
+
+
+
+
+
+
+
