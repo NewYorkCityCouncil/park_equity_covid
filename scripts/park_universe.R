@@ -40,7 +40,7 @@ park_universe[is.na(park_universe$landuse)==T,]$landuse <- park_universe[is.na(p
 
 
 # add park features not found in open space --------
-rdf<- openspace %>% as.data.frame() %>% select(!geometry)
+rdf<- openspace %>% as.data.frame() 
 
 rj1<- left_join(parksprop,rdf, by=c("gispropnum"="parknum"), keep=T) %>% 
   filter(!duplicated(globalid)) %>% 
@@ -54,9 +54,11 @@ pp_minus_innr1 <- rj1[which(rj1$uid%in%innr1$uid==F),]
 
 ## reorder columns to rbind
 pp_minus_innr1$subtype <- rep(NA, nrow(pp_minus_innr1))
-pp_minus_innr1 <- pp_minus_innr1[,c(36:45,1:35,48,46)]
 
-park_universe <- park_universe %>% select(!uid)
+pp_minus_innr1 <- pp_minus_innr1[,c(36:45,1:35,49)]
+
+pp_minus_innr1<- pp_minus_innr1 %>% select(!uid)
+ st_geometry(pp_minus_innr1) <- "geometry"
 
 #test<-cbind(names(park_universe), names(pp_minus_innr1))
 
@@ -109,6 +111,7 @@ row.names(park_universe_final)<-NULL
 st_write(park_universe_final, "data/openspace_parks_dissolve.geojson",
             driver='GeoJSON', delete_dsn=TRUE)
 
+
 # add square footage to access pts ----
 # 50 ft - 15.24m
 
@@ -123,14 +126,32 @@ wf <- st_read("data/Waterfront/geo_export_3a9b8ad8-00be-4d92-ad09-16ab27adcb34.s
   select(name, wpaa_area, wpaa_id, geometry)
 
 pow <- st_read("data/publiclyownedwaterfront/geo_export_accfbd3e-51d3-4589-807c-67f728e5026f.shp") %>%
-  st_transform("+proj=longlat +datum=WGS84")
-
+  st_transform("+proj=longlat +datum=WGS84") %>% 
+  mutate(uid = paste(name, shape_star ,sep = " "))
 
 # to aviod running the whole st_join which takes awhile, ran the ones that didnt match with the new features added
-tt1<- st_read("data/sf_access.geojson") %>% 
-  select(!test)
+tt1<- st_read("data/sf_access.geojson")
 
+# tt1 <- tt1[tt1$typecategory == "Waterfront",]
+# 
+# tt1 <- tt1 %>% 
+filter(!is.na(squareft)) %>% 
+mutate(uid = paste(park_name, squareft ,sep = " ")) %>% 
+filter(!duplicated(uid))
 
+wft <- inner_join(pow, tt1 %>% as.data.frame(), by = c("uid"="uid"))
+
+wft <- wft[,10:22]
+park_universe_final <- park_universe_final %>% select(1:11, 13,12)
+names(wft)<- names(park_universe_final)
+st_geometry(wft) <- "geometry"
+parks_universe_final_wf <- rbind(park_universe_final, wft)
+
+st_write(parks_universe_final_wf,"data/parks_with_sf_matched.geojson",
+        driver='GeoJSON', delete_dsn=TRUE)
+     
+
+############3
 sf2<- st_join(access[which(is.na(tt1$squareft)==T),], 
               park_universe_final, join = st_nn, maxdist = 15.24)
 names(sf2) <- names(tt1)
@@ -185,9 +206,13 @@ qqnorm(log10(tt2$squareft), pch = 1, frame = FALSE)
 qqline(log10(tt2$squareft), pch = 1, frame = FALSE)
 library(ggpubr)
 tt2$log<- log10(tt2$squareft)
-ggqqplot(tt2, x = "log") +
+p <- ggqqplot(tt2, x = "log") +
   scale_x_continuous(breaks = seq(-3,3,.5),
-                     labels = seq(-3,3,.5))
+                     labels = seq(-3,3,.5)) +
+  scale_y_continuous(breaks = seq(0,8,1),
+                     labels = seq(0,8,1)) +
+  theme(panel.grid.major.x = element_line(),
+        panel.grid.major.y = element_line())
 
 quantile(tt2$log, na.rm = T, seq(0, 1, by=.1))
 
