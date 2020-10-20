@@ -499,7 +499,7 @@ cor(log(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
 ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
-    title = "Park Equity: Square Feet Per Capita and COVID19 Case Rate by Borough",
+    title = "Park Equity: Zip Code Square Feet Per Capita and COVID19 Case Rate",
     x = "Least to Most Square Feet Per Capita (Rank)",
     y = "COVID19 Case Rate", 
     color = "Borough"
@@ -521,7 +521,7 @@ cor(rank(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
 ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
-    title = "Park Equity: Square Feet Per Capita and Median Income by Borough",
+    title = "Park Equity: Zip Code Square Feet Per Capita and Median Income",
     x = "Least to Most Square Feet Per Capita (Rank)",
     y = "Median Income", 
     color = "Borough"
