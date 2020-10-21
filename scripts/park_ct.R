@@ -142,80 +142,59 @@ for (i in unique(map_sf_zip$MODZCTA)){
 
 ########################################################################
 
-############ Analysis
-
 # Check which census tracts are inside the "walkable" area shapefile
 ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
 
 # Import 10-Min Walk buffers made by isochrones.R
 iso <- readOGR("data/isochrones_10min_accesspts.geojson")
+# Read shapefile from park_universe.R
 sqft_pts <- readOGR("data/sf_access.geojson")
 
+# Link iso dataset to park_universe variables
 iso@data$squareft <- sqft_pts@data$squareft
 iso@data$park_name <- sqft_pts@data$park_name
 iso@data$parknum <- sqft_pts@data$parknum
+# Try park_name first, then parknum, then parkname
 iso@data$parkid <- ifelse(!is.na(iso@data$park_name), as.character(iso@data$park_name), 
                      ifelse(!is.na(iso@data$parknum), as.character(iso@data$parknum), 
                             as.character(iso@data$parkname)))
+# Drop rows with squareft NA's 
 iso@data <- subset(iso@data, !is.na(squareft))
 
-#drop squareft NA
+########################################################################
 
-# map_iso <- leaflet() %>%
-#   setView(-73.935242,40.730610,10) %>%
-#   addProviderTiles("CartoDB.Positron") %>%
-#   addPolygons(data=iso, weight=1) %>%
-#   addCircles(data=ct_demo$center, 
-#              group= "Center") %>%
-#   addCircles(data=access, 
-#              group= "Access", 
-#              color="red")
-# map_iso
-
-# test <- subset(iso, is.na(parkname))
-# 
-# map_test <- leaflet() %>%
-#   setView(-73.935242,40.730610,10) %>%
-#   addProviderTiles("CartoDB.Positron") %>%
-#   addPolygons(data=test, weight=0.1) %>%
-#   addCircles(data=ct_demo$center,
-#              group= "Center",
-#              popup = lapply(labels,HTML)) %>%
-#   addCircles(data=subset(access, is.na(parkname) & is.na(gispropnum)),
-#              group= "Access",
-#              color="red")
-# map_test
-# sort(ct_walk[which(ct_walk$`East River Park`==1),]$tract)
-
-
-
+# Create ct_walk from ct_demo (income and population data at census tract)
 ct_walk <- ct_demo
 
+# Create list of non-NA park ID's
 parknames <- unique(as.character(subset(iso, !is.na(iso@data$parkid))$parkid))
 
-# create column for each park
+# Create column for each park 
 ct_walk[, parknames] <- 0 
 
+# For each park ID
 for (i in parknames){
   temp_cens <- ct_demo[0,]
-  # collect the access points for each park
+  # Collect the access points for each park
   for (j in rownames(iso@data[which(iso@data$parkid==i),])){
-    # rows off by 1 for some reason
+    # Note: Rows diff by 1
     temp_sp <- SpatialPolygons(list(iso@polygons[[as.numeric(j)+1]])) 
-    # make same crs
+    # Make same crs
     crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
-    # create list of all census tracts within iso of access points to parkname (i)
+    # Create list of all census tracts within iso of access points to parkname (i)
     temp_cens <- rbind(temp_cens, ct_demo[!is.na(over(as_Spatial(ct_demo$center), temp_sp)),])
   }
-  # each column says whether or not the census tract has access to the column name park
+  # each column says whether or not the census tract has access to the column name park and the square footage of that park if it has access
   nam <- i
   ct_walk[, nam] <- ifelse(ct_walk$NAME %in% temp_cens$NAME, unique(subset(iso@data, parkid==nam)$squareft), 0)
 }
 
-# do squareft / park
+# Find total park square footage accessible by each census tract
 ct_walk$parktot <- round(rowSums(st_drop_geometry(ct_walk[,35:1254]), na.rm=TRUE), 2)
+# Find per capita park square footage accessible by each census tract by dividing by ACS population data
 ct_walk$parktotpc <- round(ct_walk$parktot / ct_walk$B01003_001E, 2)
 
+# Save ct_walk files and zip ct_walk
 # st_write(ct_walk[, c(1:6,18,20,23,28,29,30,31,1262,1263)], 
 #          "data/ct_walk.geojson",
 #          driver='GeoJSON', delete_dsn=TRUE)
@@ -225,75 +204,14 @@ ct_walk$parktotpc <- round(ct_walk$parktot / ct_walk$B01003_001E, 2)
 # 
 # zip(zipfile = 'data/ct_walk', files = dir('data/ct_walk/', full.names = TRUE))
 
-
-openspace <- readOGR("data/openspace_parks_dissolve.geojson")
-
-
-puma <- readOGR("data/Public Use Microdata Areas (PUMA).geojson")
-
-labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
-                "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
-                "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
-                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
-                "<p>","sqft: ",round(ct_walk$parktot, 0),"</p>", 
-                "<p>","sqft per capita: ",round(ct_walk$parktotpc, 0),"</p>")
-
-pal_sqft <- colorBin(
-  palette = "YlGn",
-  domain = ct_walk$parktot,
-  bins = ceiling(quantile(ct_walk$parktot, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
-)
-pal_sqftpc <- colorBin(
-  palette = "YlGn",
-  domain = ct_walk$parktotpc, 
-  bins = ceiling(quantile(ct_walk$parktotpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
-)
-
-map_sqft <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~pal_sqft(ct_walk$parktot),
-              fillOpacity = 0.5, 
-              group = "Square Footage", 
-              popup = lapply(labels_sqft,HTML)) %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~pal_sqftpc(ct_walk$parktotpc),
-              fillOpacity = 0.5,
-              group = "Square Footage Per Capita", 
-              popup = lapply(labels_sqft,HTML)) %>%
-  addPolylines(data=puma, weight=0.5, color="black") %>%
-  addPolygons(data=openspace, 
-              color="green",
-              group = "Open Space") %>%
-  # addLegend(pal = pal_sqft, values = ct_walk$parktot,
-  #           group = "Square Footage", 
-  #           position = "bottomright") %>%
-  addLegend(pal = pal_sqftpc, values = ct_walk$parktotpc,
-            group = "Square Footage Per Capita",
-            position = "bottomright") %>%
-  addLayersControl(
-    overlayGroups = c("Square Footage Per Capita", "Open Space"),
-    options = layersControlOptions(collapsed = FALSE))%>% 
-#  hideGroup("Square Footage") %>% 
-  hideGroup("Open Space")
-
-map_sqft
-
-saveWidget(map_sqft, file = "map_sqft.html")
-
 ########################################################################
 
-# MODZCTA aggregation
+# Aggregate census tract data to MODZCTA for comparisons with COVID19 data
 
-# Aggregate census sqft up to MODZCTA
+# Merge census tract to ZCTA crosswalk with ct_walk data
 Z_sqft <- merge(ZNYC, ct_walk[,c("boro_ct201", "parktot", "parktotpc")], by="boro_ct201")
 
-# zcta sqft is weighted average of sqft in each nested tract 
+# ZCTA sqft is weighted average of sqft in each nested census tract 
 for (i in unique(Z_sqft$ZCTA5)){
   Z_sqft[Z_sqft$ZCTA5==i,"Z_sqft"] <- sum(Z_sqft[Z_sqft$ZCTA5==i,"parktot"] * 
                                      Z_sqft[Z_sqft$ZCTA5==i,"ZPOPPCT"]/
@@ -305,10 +223,13 @@ for (i in unique(Z_sqft$ZCTA5)){
   Z_sqft[Z_sqft$ZCTA5==i,"Pop_Add"] <- sum(Z_sqft[Z_sqft$ZCTA5==i,"POPPT"])
 }
 
+# Merge ZCTA to MODZCTA crosswalk with Z_sqft data
 Pop_MZtoZ_sqft <- unique(merge(MZtoZ, Z_sqft[,c("ZCTA5", "Pop_Add", "Z_sqft")], by="ZCTA5"))
 Pop_MZtoZ <- unique(merge(Pop_MZtoZ_sqft, acs5_sub_zip[,c("ZCTA5", "S1901_C01_012E")], by="ZCTA5"))
 Pop_MZtoZ$S1901_C01_012E <- ifelse(Pop_MZtoZ$S1901_C01_012E<=0, NA, Pop_MZtoZ$S1901_C01_012E)
 
+
+# MODZCTA sqft is weighted average of sqft in each nested ZCTA
 for (j in Pop_MZtoZ$MODZCTA){
   Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"sqft"] <- sum(Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Z_sqft"] * 
                                         Pop_MZtoZ[Pop_MZtoZ$MODZCTA==j,"Pop_Add"]/
@@ -321,123 +242,31 @@ for (j in Pop_MZtoZ$MODZCTA){
                                             , na.rm=TRUE)
 }
 
+# Merge MODZCTA sqft data with MODZCTA shapefile
 sqft_mzcta <- unique(st_sf(merge(map_sf_zip, Pop_MZtoZ, by = "MODZCTA")))
+# Calculate square feet per capita for each MODZCTA
 sqft_mzcta$sqftpc <- ifelse(sqft_mzcta$Pop_Add_MODZCTA!=0, 
                             sqft_mzcta$sqft / sqft_mzcta$Pop_Add_MODZCTA, 
                             NA)
 sqft_mzcta<- st_sf(sqft_mzcta)
 
-########################################################################
+# Keep unique MODZCTA and merge shapefile with square feet, square feet per capita, median income, population
+mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "MedInc", "sqft", "sqftpc", "Pop_Add_MODZCTA")])), by="MODZCTA")
 
-# MAP
+# Rank each MODZCTA across COVID case rate, square feet per capita, and median income
+mzcta$rankccr <- rank(-mzcta$COVID_CASE_RATE)
+mzcta$ranksqft <- rank(mzcta$sqftpc)
+mzcta$rankinc <- rank(mzcta$MedInc)
+mzcta$ccrsqft <- mzcta$rankccr + mzcta$ranksqft
 
-# Demographics and Within 10-min Walk Overlay
+#write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
 
-labels_census <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
-                "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
-                "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
-                "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
-                "<p>","Square feet (tract): ",round(ct_walk$parktot, 0),"</p>", 
-                "<p>","Square feet per capita (tract): ",round(ct_walk$parktotpc, 0),"</p>")
-
-labels_modzcta <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>", 
-                       "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
-                       "<p>","COVID19 Case Rate: ",sqft_mzcta$COVID_CASE_RATE,"</p>", 
-                       "<p>","Neighborhood: ",sqft_mzcta$NEIGHBORHOOD_NAME,"</p>",
-                       "<p>","Median Income: ",sqft_mzcta$MedInc,"</p>", 
-                       "<p>","# Census Tracts in MODZCTA: ",sqft_mzcta$numct,"</p>",
-                       "<p>","Square feet (MODZCTA): ",round(sqft_mzcta$sqft, 0),"</p>", 
-                       "<p>","Square feet per capita (MODZCTA): ",round(sqft_mzcta$sqftpc, 0),"</p>")
-
-map <- leaflet() %>%
-  setView(-73.935242,40.730610,10) %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = ct_walk$S1901_C01_012E)(ct_walk$S1901_C01_012E),
-              fillOpacity = 0.5,
-              group = "Tract Income", 
-              popup = lapply(labels_census,HTML)) %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = ct_walk$B01003_001E)(ct_walk$B01003_001E),
-              fillOpacity = 0.5,
-              group = "Tract Population", 
-              popup = lapply(labels_census,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$COVID_CASE_RATE)(sqft_mzcta$COVID_CASE_RATE),
-              fillOpacity = 0.5,
-              group = "COVID Case Rate", 
-              popup = lapply(labels_modzcta,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorBin("YlOrRd", domain = sqft_mzcta$MedInc)(sqft_mzcta$MedInc),
-              fillOpacity = 0.5,
-              group = "Median Income", 
-              popup = lapply(labels_modzcta,HTML)) %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktot)(ct_walk$parktot),
-              fillOpacity = 0.5,
-              group = "Tract sqft",
-              popup = lapply(labels_census,HTML)) %>%
-  addPolygons(data=ct_walk,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktotpc)(ct_walk$parktotpc),
-              fillOpacity = 0.5,
-              group = "Tract sqft per capita",
-              popup = lapply(labels_census,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = sqft_mzcta$sqft)(sqft_mzcta$sqft),
-              fillOpacity = 0.5,
-              group = "MODZCTA sqft", 
-              popup = lapply(labels_modzcta,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
-              weight = 1,
-              color = "grey",
-              fillColor = ~colorQuantile("YlOrRd", domain = sqft_mzcta$sqftpc)(sqft_mzcta$sqftpc),
-              fillOpacity = 0.5,
-              group = "MODZCTA sqft per capita", 
-              popup = lapply(labels_modzcta,HTML)) %>%
-  addPolygons(data=shape, 
-              weight=1, 
-              group= "Walk") %>%
-  addCircles(data=ct_demo$center, 
-             group= "Center") %>%
-  addCircles(data=access, 
-             group= "Access", 
-             color="red") %>%
-  addCircles(data=subset(ct_demo, ins==0)$center, 
-             group= "Not Walkable", 
-             color="black") %>%
-  addLayersControl(
-    overlayGroups = c("Walk", "Tract Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID Case Rate", 
-                      "Median Income", "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
-    options = layersControlOptions(collapsed = FALSE)) %>% 
-  hideGroup("Walk") %>% 
-  hideGroup("Tract Income") %>% 
-  hideGroup("Tract Population") %>% 
-  hideGroup("Access") %>% 
-  hideGroup("Center") %>% 
-  hideGroup("Not Walkable") %>% 
-  hideGroup("COVID Case Rate") %>% 
-  hideGroup("Tract sqft") %>% 
-  hideGroup("MODZCTA sqft") %>% 
-  hideGroup("MODZCTA sqft per capita") 
-map
-
-saveWidget(map, file = "map.html")
 
 ########################################################################
+
+############ Plots 
+
+# Inside vs. Outside "Walkable" plots 
 
 ggplot(ct_demo,aes(x=S1901_C01_012E)) + 
   geom_histogram(data=subset(ct_demo,ins == 0),fill = "red", alpha = 0.2) +
@@ -460,7 +289,6 @@ ggplot(ct_demo,aes(x=B01003_001E)) +
     title = "Population Distribution by Walkable to Park"
   ) + 
   facet_wrap(~boro_name)
-
 
 # Census tract summary data
 ct_boro_total <- ct_demo %>%
@@ -495,26 +323,7 @@ pop_boro
 
 ########################################################################
 
-# take highest covid level areas and look at their relative access to parks
-# side by side map and plot of covid and sqftpc
-
-
-mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "MedInc", "sqft", "sqftpc")])), by="MODZCTA")
-mzcta$rankccr <- rank(-mzcta$COVID_CASE_RATE)
-mzcta$ranksqft <- rank(mzcta$sqftpc)
-mzcta$rankinc <- rank(mzcta$MedInc)
-mzcta$ccrsqft <- mzcta$rankccr + mzcta$ranksqft
-
-#write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
-
-ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point()
-ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + geom_point()
-
-ggplot(mzcta, aes(x=log(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
-  geom_point() +
-  facet_wrap(~BOROUGH_GROUP)
-cor(log(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
-
+# MODZCTA square feet per capita and COVID case rate plot
 ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
@@ -533,17 +342,8 @@ ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) +
     legend = c("none"),
     x.text.angle = 0
   ) 
-cor(rank(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
 
-ggplot(mzcta, aes(x=log(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
-cor(log(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
-
-ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
-cor(rank(mzcta$sqftpc), mzcta$COVID_DEATH_RATE)
-
-
-# Income
-
+# MODZCTA square feet per capita and median income plot
 ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
@@ -563,67 +363,245 @@ ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) +
     x.text.angle = 0
   ) 
 
+########################################################################
 
-labels_compare <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>", 
-                        "<p>",paste0("Population: ",sqft_mzcta$Pop_Add_MODZCTA),"</p>", 
-                        "<p>","Neighborhood: ",sqft_mzcta$NEIGHBORHOOD_NAME,"</p>",
-                        "<p>","COVID19 Case Rate: ",round(sqft_mzcta$COVID_CASE_RATE, 0),"</p>", 
-                        "<p>","Median Income: ",round(sqft_mzcta$MedInc, 0),"</p>",
-                        "<p>","Square feet per capita: ",round(sqft_mzcta$sqftpc, 0),"</p>")
+############ Maps
+
+# Map of all variables at census tract and MODZCTA level
+
+labels_census <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
+                       "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
+                       "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
+                       "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
+                       "<p>","Square feet (tract): ",round(ct_walk$parktot, 0),"</p>", 
+                       "<p>","Square feet per capita (tract): ",round(ct_walk$parktotpc, 0),"</p>")
+
+labels_modzcta <- paste("<h3>","MODZCTA: ",mzcta$MODZCTA,"</h3>", 
+                        "<p>",paste0("Population: ",mzcta$Pop_Add_MODZCTA),"</p>", 
+                        "<p>","COVID19 Case Rate: ",mzcta$COVID_CASE_RATE,"</p>", 
+                        "<p>","Neighborhood: ",mzcta$NEIGHBORHOOD_NAME,"</p>",
+                        "<p>","Median Income: ",mzcta$MedInc,"</p>", 
+                        "<p>","# Census Tracts in MODZCTA: ",mzcta$numct,"</p>",
+                        "<p>","Square feet (MODZCTA): ",round(mzcta$sqft, 0),"</p>", 
+                        "<p>","Square feet per capita (MODZCTA): ",round(mzcta$sqftpc, 0),"</p>")
+
+map <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=ct_walk,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = ct_walk$S1901_C01_012E)(ct_walk$S1901_C01_012E),
+              fillOpacity = 0.5,
+              group = "Tract Median Income", 
+              popup = lapply(labels_census,HTML)) %>%
+  addPolygons(data=ct_walk,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = ct_walk$B01003_001E)(ct_walk$B01003_001E),
+              fillOpacity = 0.5,
+              group = "Tract Population", 
+              popup = lapply(labels_census,HTML)) %>%
+  addPolygons(data=mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = mzcta$COVID_CASE_RATE)(mzcta$COVID_CASE_RATE),
+              fillOpacity = 0.5,
+              group = "COVID Case Rate", 
+              popup = lapply(labels_modzcta,HTML)) %>%
+  addPolygons(data=mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorBin("YlOrRd", domain = mzcta$MedInc)(mzcta$MedInc),
+              fillOpacity = 0.5,
+              group = "MODZCTA Median Income", 
+              popup = lapply(labels_modzcta,HTML)) %>%
+  addPolygons(data=ct_walk,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktot)(ct_walk$parktot),
+              fillOpacity = 0.5,
+              group = "Tract sqft",
+              popup = lapply(labels_census,HTML)) %>%
+  addPolygons(data=ct_walk,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorQuantile("YlOrRd", domain = ct_walk$parktotpc)(ct_walk$parktotpc),
+              fillOpacity = 0.5,
+              group = "Tract sqft per capita",
+              popup = lapply(labels_census,HTML)) %>%
+  addPolygons(data=mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorQuantile("YlOrRd", domain = mzcta$sqft)(mzcta$sqft),
+              fillOpacity = 0.5,
+              group = "MODZCTA sqft", 
+              popup = lapply(labels_modzcta,HTML)) %>%
+  addPolygons(data=mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~colorQuantile("YlOrRd", domain = mzcta$sqftpc)(mzcta$sqftpc),
+              fillOpacity = 0.5,
+              group = "MODZCTA sqft per capita", 
+              popup = lapply(labels_modzcta,HTML)) %>%
+  addPolygons(data=shape, 
+              weight=1, 
+              group= "Walk") %>%
+  addCircles(data=ct_demo$center, 
+             group= "Center") %>%
+  addCircles(data=access, 
+             group= "Access", 
+             color="red") %>%
+  addCircles(data=subset(ct_demo, ins==0)$center, 
+             group= "Not Walkable", 
+             color="black") %>%
+  addLayersControl(
+    overlayGroups = c("Walk", "Tract Median Income", "Tract Population", "Access", "Center", "Not Walkable", "COVID Case Rate", 
+                      "MODZCTA Median Income", "Tract sqft", "Tract sqft per capita", "MODZCTA sqft", "MODZCTA sqft per capita"),
+    options = layersControlOptions(collapsed = FALSE)) %>% 
+  hideGroup("Walk") %>% 
+  hideGroup("Tract Median Income") %>% 
+  hideGroup("Tract Population") %>% 
+  hideGroup("Access") %>% 
+  hideGroup("Center") %>% 
+  hideGroup("Not Walkable") %>% 
+  hideGroup("COVID Case Rate") %>% 
+  hideGroup("MODZCTA Median Income") %>% 
+  hideGroup("Tract sqft") %>% 
+  hideGroup("MODZCTA sqft") %>% 
+  hideGroup("MODZCTA sqft per capita") 
+map
+
+#saveWidget(map, file = "map.html")
+
+########################################################################
+
+# Map square footage and square footage per capita data at census tract level with PUMA overlay
+
+# Import open space shapfile from park_universe.R
+openspace <- readOGR("data/openspace_parks_dissolve.geojson")
+# Import PUMA shapefile
+puma <- readOGR("data/Public Use Microdata Areas (PUMA).geojson")
+
+labels_sqft <- paste("<h3>","Name: ",ct_walk$NAME, "</h3>",
+                     "<p>",paste0("Tract: ",ct_walk$tract),"</p>", 
+                     "<p>",paste0("Median Income: ",ct_walk$S1901_C01_012E),"</p>",  
+                     "<p>",paste0("Population: ",ct_walk$B01003_001E),"</p>",
+                     "<p>","sqft: ",round(ct_walk$parktot, 0),"</p>", 
+                     "<p>","sqft per capita: ",round(ct_walk$parktotpc, 0),"</p>")
+
+pal_sqft <- colorBin(
+  palette = "YlGn",
+  domain = ct_walk$parktot,
+  bins = ceiling(quantile(ct_walk$parktot, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+pal_sqftpc <- colorBin(
+  palette = "YlGn",
+  domain = ct_walk$parktotpc, 
+  bins = ceiling(quantile(ct_walk$parktotpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+)
+
+map_sqft <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  # addPolygons(data=ct_walk,
+  #             weight = 1,
+  #             color = "grey",
+  #             fillColor = ~pal_sqft(ct_walk$parktot),
+  #             fillOpacity = 0.5, 
+  #             group = "Square Footage", 
+  #             popup = lapply(labels_sqft,HTML)) %>%
+  addPolygons(data=ct_walk,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_sqftpc(ct_walk$parktotpc),
+              fillOpacity = 0.5,
+              group = "Square Footage Per Capita", 
+              popup = lapply(labels_sqft,HTML)) %>%
+  addPolylines(data=puma, weight=0.5, color="black") %>%
+  addPolygons(data=openspace, 
+              color="green",
+              group = "Open Space") %>%
+  # addLegend(pal = pal_sqft, values = ct_walk$parktot,
+  #           group = "Square Footage", 
+  #           position = "bottomright") %>%
+  addLegend(pal = pal_sqftpc, values = ct_walk$parktotpc,
+            group = "Square Footage Per Capita",
+            position = "bottomright") %>%
+  addLayersControl(
+    overlayGroups = c("Square Footage Per Capita", "Open Space"),
+    options = layersControlOptions(collapsed = FALSE))%>% 
+  #  hideGroup("Square Footage") %>% 
+  hideGroup("Open Space")
+
+map_sqft
+
+#saveWidget(map_sqft, file = "map_sqft.html")
+
+########################################################################
+
+# Map square feet per captita, COVID case rate, and median income at MODZCTA level
+
+labels_compare <- paste("<h3>","MODZCTA: ",mzcta$MODZCTA,"</h3>", 
+                        "<p>",paste0("Population: ",mzcta$Pop_Add_MODZCTA),"</p>", 
+                        "<p>","Neighborhood: ",mzcta$NEIGHBORHOOD_NAME,"</p>",
+                        "<p>","COVID19 Case Rate: ",round(mzcta$COVID_CASE_RATE, 0),"</p>", 
+                        "<p>","Median Income: ",round(mzcta$MedInc, 0),"</p>",
+                        "<p>","Square feet per capita: ",round(mzcta$sqftpc, 0),"</p>")
 
 pal_sqftpc_m <- colorBin(
   palette = "YlGn",
-  domain = sqft_mzcta$sqftpc, 
-  bins = ceiling(quantile(sqft_mzcta$sqftpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+  domain = mzcta$sqftpc, 
+  bins = c(floor(quantile(mzcta$sqftpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE)[1]) ,ceiling(quantile(mzcta$sqftpc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))[2:6])
 )
 
 pal_covid_m <- colorBin(
   palette = "YlGn",
-  domain = sqft_mzcta$COVID_CASE_RATE, 
-  bins = ceiling(quantile(sqft_mzcta$COVID_CASE_RATE, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+  domain = mzcta$COVID_CASE_RATE, 
+  bins = c(floor(quantile(mzcta$COVID_CASE_RATE, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE)[1]) ,ceiling(quantile(mzcta$COVID_CASE_RATE, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))[2:6])
 )
 
 pal_inc_m <- colorBin(
   palette = "YlGn",
-  domain = sqft_mzcta$MedInc, 
-  bins = ceiling(quantile(sqft_mzcta$MedInc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))
+  domain = mzcta$MedInc, 
+  bins = c(floor(quantile(mzcta$MedInc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE)[1]) ,ceiling(quantile(mzcta$MedInc, na.rm=TRUE, probs=seq(0,1,0.2), names=FALSE))[2:6])
 )
 
 
 map_compare <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_covid_m(sqft_mzcta$COVID_CASE_RATE),
+              fillColor = ~pal_covid_m(mzcta$COVID_CASE_RATE),
               fillOpacity = 0.5,
               group = "COVID Case Rate", 
               popup = lapply(labels_compare,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_inc_m(sqft_mzcta$MedInc),
+              fillColor = ~pal_inc_m(mzcta$MedInc),
               fillOpacity = 0.5,
               group = "Median Income", 
               popup = lapply(labels_compare,HTML)) %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_sqftpc_m(sqft_mzcta$sqftpc),
+              fillColor = ~pal_sqftpc_m(mzcta$sqftpc),
               fillOpacity = 0.5,
               group = "Square feet per capita", 
               popup = lapply(labels_compare,HTML)) %>%
   addLayersControl(
     overlayGroups = c("COVID Case Rate", "Median Income", "Square feet per capita"),
     options = layersControlOptions(collapsed = FALSE))  %>%
-  addLegend(pal = pal_covid_m, values = sqft_mzcta$COVID_CASE_RATE,
+  addLegend(pal = pal_covid_m, values = mzcta$COVID_CASE_RATE,
            group = "COVID Case Rate", 
            position = "bottomright") %>%
-  addLegend(pal = pal_inc_m, values = sqft_mzcta$MedInc,
+  addLegend(pal = pal_inc_m, values = mzcta$MedInc,
           group = "Median Income",
           position = "bottomright") %>%
-  addLegend(pal = pal_sqftpc_m, values = sqft_mzcta$sqftpc,
+  addLegend(pal = pal_sqftpc_m, values = mzcta$sqftpc,
             group = "Square feet per capita",
             position = "bottomright") %>%
   hideGroup("COVID Case Rate") %>% 
@@ -636,14 +614,14 @@ saveWidget(map_compare, file = "map_compare.html")
 map_covid <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_covid_m(sqft_mzcta$COVID_CASE_RATE),
+              fillColor = ~pal_covid_m(mzcta$COVID_CASE_RATE),
               fillOpacity = 0.5,
               group = "COVID Case Rate", 
               popup = lapply(labels_compare,HTML)) %>%
-  addLegend(pal = pal_covid_m, values = sqft_mzcta$COVID_CASE_RATE,
+  addLegend(pal = pal_covid_m, values = mzcta$COVID_CASE_RATE,
             group = "COVID Case Rate", 
             position = "bottomright", 
             title = "COVID19 Case Rate Per 100,000<br> by Zip Code")
@@ -652,14 +630,14 @@ map_covid
 map_income <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_inc_m(sqft_mzcta$MedInc),
+              fillColor = ~pal_inc_m(mzcta$MedInc),
               fillOpacity = 0.5,
               group = "Median Income", 
               popup = lapply(labels_compare,HTML)) %>%
-  addLegend(pal = pal_inc_m, values = sqft_mzcta$MedInc,
+  addLegend(pal = pal_inc_m, values = mzcta$MedInc,
             group = "Median Income",
             position = "bottomright", 
             title = "Median Income<br> by Zip Code")
@@ -671,14 +649,14 @@ source_sqft <- paste("<h10>","Source: ACS Population Estimates; NYC Parks: Walk-
 map_sqft <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data=sqft_mzcta,
+  addPolygons(data=mzcta,
               weight = 1,
               color = "grey",
-              fillColor = ~pal_sqftpc_m(sqft_mzcta$sqftpc),
+              fillColor = ~pal_sqftpc_m(mzcta$sqftpc),
               fillOpacity = 0.5,
               group = "Square feet per capita", 
               popup = lapply(labels_compare,HTML)) %>%
-  addLegend(pal = pal_sqftpc_m, values = sqft_mzcta$sqftpc,
+  addLegend(pal = pal_sqftpc_m, values = mzcta$sqftpc,
             group = "Square feet per capita",
             position = "bottomright", 
             title = "Open Space Square Feet Per Capita<br> by Zip Code") 
