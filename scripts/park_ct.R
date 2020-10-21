@@ -1,4 +1,6 @@
-# Park Equity Tester 
+# Park Equity
+
+########################################################################
 
 library(leaflet)
 library(sf)
@@ -12,25 +14,38 @@ library(raster)
 library(stringr)
 library(htmlwidgets)
 library(RSocrata)
+library(ggpubr)
+
+########################################################################
+
+############ Import and Clean Data
 
 rm(list=ls())
 
-# Access Points
-
+# Walk-to-a-Park Access Points
+# https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv
 access <- read_sf("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
+# Walk-to-a-Park "walkable" shapefile 
 shape <- read_sf("data/Walk-to-a-Park Service area/geo_export_f18e18a9-a859-4692-a3e0-48095a41a0d2.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
-# Income Data
-
+# Census tracts shapefile 
 ct <- read_sf("data/2010 Census Tracts/geo_export_8d38b305-5fed-49a0-a548-46435c11e818.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
+# Create center point of census tract
 ct$center <- st_centroid(ct$geometry, of_largest_polygon = TRUE)
 
+########################################################################
+
+# ACS Income and Population Data
+
+# Income data to pull from ACS
 income_col <- c("NAME", "GEO_ID", paste0("S1901_C01_0",formatC(1:13, width = 2, flag = "0"), "E")) 
 
+# Note: you must get a census API key to use these functions
+# Income data at census tract level
 acs5_sub_tract <- getCensus(
   name = "acs/acs5/subject",
   vintage = 2018,
@@ -38,6 +53,7 @@ acs5_sub_tract <- getCensus(
   region = "tract:*", 
   regionin = "state:36+county:005,047,081,085,061")
 
+# Income data at zip code (zcta5) level
 acs5_sub_zip <- getCensus(
   name = "acs/acs5/subject",
   vintage = 2018,
@@ -45,6 +61,7 @@ acs5_sub_zip <- getCensus(
   region = "zip code tabulation area:*")
 acs5_sub_zip$ZCTA5 <- acs5_sub_zip$zip_code_tabulation_area
 
+# Population data to pull from ACS
 pop_col <- c("NAME", "B01003_001E")
 
 acs5_det_tract <- getCensus(
@@ -54,9 +71,10 @@ acs5_det_tract <- getCensus(
   region = "tract:*", 
   regionin = "state:36+county:005,047,081,085,061")
 
-
+# Combine income and population data for census tract
 acs_tract <- merge(acs5_sub_tract, acs5_det_tract[,c("NAME", "B01003_001E")], by="NAME")
 
+# Make consistent boro code designations
 acs_tract$boro_code <- 0
 for(i in 1:nrow(acs_tract)){ 
 if(acs_tract$county[i]=="005") acs_tract$boro_code[i] <- "2"
@@ -67,16 +85,14 @@ if(acs_tract$county[i]=="085") acs_tract$boro_code[i] <- "5"
 }
 acs_tract$boro_ct201 <- paste0(acs_tract$boro_code, acs_tract$tract)
 
+# Merge shapefile and income / population data
 ct_demo <- st_sf(merge(acs_tract, ct, by="boro_ct201"))
 ct_demo$S1901_C01_012E <- ifelse(ct_demo$S1901_C01_012E<=0, NA, ct_demo$S1901_C01_012E)
 ct_demo$B01003_001E <- ifelse(ct_demo$B01003_001E<=0, NA, ct_demo$B01003_001E)
 
-ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
+########################################################################
 
-
-# COVID
-
-### Import and Clean Covid and Crosswalk Data
+# COVID data
 
 # Covid data from NYC Health
 URL_C19 <- "https://raw.githubusercontent.com/nychealth/coronavirus-data/master/data-by-modzcta.csv"
@@ -102,7 +118,7 @@ ZNYC <- ZNYC %>% rename(tract = TRACT)
 ZNYC$tract <- as.character(as.numeric(ZNYC$tract/100))
 ZNYC$boro_code <- str_sub(ZNYC$GEOID,-8,-7) #strip boro code from GEOID
 
-
+# Make consistent boro code designations
 for(i in 1:nrow(ZNYC)){ 
   if(ZNYC$boro_code[i]=="05") ZNYC$boro_code[i] <- "2"
   if(ZNYC$boro_code[i]=="81") ZNYC$boro_code[i] <- "4"
@@ -112,14 +128,13 @@ for(i in 1:nrow(ZNYC)){
 }
 ZNYC$boro_ct201 <- paste0(ZNYC$boro_code, substr(ZNYC$GEOID, 6, 11))
 
-########################################################################
-
+# MODZCTA Shapefile
 # https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources
 nyczipjson <- read_sf("data/MODZCTA_2010/MODZCTA_2010.shp") %>% 
   st_transform("+proj=longlat +datum=WGS84")
 map_sf_zip <- st_sf(merge(nyczipjson, C19, by = "MODZCTA"))
 
-# Covid
+# Count number of census tracts in each MODZCTA
 map_sf_zip$numct <- 0
 for (i in unique(map_sf_zip$MODZCTA)){
   map_sf_zip[which(map_sf_zip$MODZCTA==i), "numct"] <- length(which(!is.na(over(as_Spatial(ct_demo$center), as_Spatial(subset(map_sf_zip, MODZCTA==i)))$MODZCTA)))
@@ -127,8 +142,12 @@ for (i in unique(map_sf_zip$MODZCTA)){
 
 ########################################################################
 
-# 10-Min Walk buffers
+############ Analysis
 
+# Check which census tracts are inside the "walkable" area shapefile
+ct_demo$ins <- ifelse(is.na(over(as_Spatial(ct_demo$center), as_Spatial(shape))$type), 0, 1)
+
+# Import 10-Min Walk buffers made by isochrones.R
 iso <- readOGR("data/isochrones_10min_accesspts.geojson")
 sqft_pts <- readOGR("data/sf_access.geojson")
 
@@ -481,10 +500,10 @@ pop_boro
 
 
 mzcta <- merge(map_sf_zip, st_drop_geometry(unique(sqft_mzcta[,c("MODZCTA", "MedInc", "sqft", "sqftpc")])), by="MODZCTA")
-mzcta$rankccr <- rank(mzcta$COVID_CASE_RATE)
+mzcta$rankccr <- rank(-mzcta$COVID_CASE_RATE)
 mzcta$ranksqft <- rank(mzcta$sqftpc)
 mzcta$rankinc <- rank(mzcta$MedInc)
-
+mzcta$ccrsqft <- mzcta$rankccr + mzcta$ranksqft
 
 #write.csv(st_drop_geometry(mzcta), "data/mzcta.csv")
 
@@ -502,11 +521,18 @@ ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) +
     title = "Park Equity: Zip Code Square Feet Per Capita and COVID19 Case Rate",
     x = "Least to Most Square Feet Per Capita (Rank)",
     y = "COVID19 Case Rate", 
-    color = "Borough"
+    color = "Borough", 
+    caption = expression(paste(italic("Source: NYC Health; NYC Parks: Walk-to-a-Park Service Area")))
   ) +
   facet_wrap(~BOROUGH_GROUP, nrow=1) + 
-  theme_bw() + 
-  theme(legend.position = "none")
+  theme_pubr(
+    base_size = 12,
+    base_family = "",
+    border = TRUE,
+    margin = TRUE,
+    legend = c("none"),
+    x.text.angle = 0
+  ) 
 cor(rank(mzcta$sqftpc), mzcta$COVID_CASE_RATE)
 
 ggplot(mzcta, aes(x=log(sqftpc), y=COVID_DEATH_RATE, color=BOROUGH_GROUP)) + geom_point() + facet_wrap(~BOROUGH_GROUP)
@@ -524,11 +550,18 @@ ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) +
     title = "Park Equity: Zip Code Square Feet Per Capita and Median Income",
     x = "Least to Most Square Feet Per Capita (Rank)",
     y = "Median Income", 
-    color = "Borough"
+    color = "Borough", 
+    caption = expression(paste(italic("Source: 2018 ACS 5-Year Estimates; NYC Parks: Walk-to-a-Park Service Area")))
   ) +
   facet_wrap(~BOROUGH_GROUP, nrow=1) + 
-  theme_bw() + 
-  theme(legend.position = "none")
+  theme_pubr(
+    base_size = 12,
+    base_family = "",
+    border = TRUE,
+    margin = TRUE,
+    legend = c("none"),
+    x.text.angle = 0
+  ) 
 
 
 labels_compare <- paste("<h3>","MODZCTA: ",sqft_mzcta$MODZCTA,"</h3>", 
@@ -600,3 +633,53 @@ map_compare
 
 saveWidget(map_compare, file = "map_compare.html")
 
+map_covid <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_covid_m(sqft_mzcta$COVID_CASE_RATE),
+              fillOpacity = 0.5,
+              group = "COVID Case Rate", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addLegend(pal = pal_covid_m, values = sqft_mzcta$COVID_CASE_RATE,
+            group = "COVID Case Rate", 
+            position = "bottomright", 
+            title = "COVID19 Case Rate Per 100,000<br> by Zip Code")
+map_covid
+
+map_income <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_inc_m(sqft_mzcta$MedInc),
+              fillOpacity = 0.5,
+              group = "Median Income", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addLegend(pal = pal_inc_m, values = sqft_mzcta$MedInc,
+            group = "Median Income",
+            position = "bottomright", 
+            title = "Median Income<br> by Zip Code")
+map_income
+
+
+source_sqft <- paste("<h10>","Source: ACS Population Estimates; NYC Parks: Walk-to-a-Park Service Area","</h10>")
+
+map_sqft <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=sqft_mzcta,
+              weight = 1,
+              color = "grey",
+              fillColor = ~pal_sqftpc_m(sqft_mzcta$sqftpc),
+              fillOpacity = 0.5,
+              group = "Square feet per capita", 
+              popup = lapply(labels_compare,HTML)) %>%
+  addLegend(pal = pal_sqftpc_m, values = sqft_mzcta$sqftpc,
+            group = "Square feet per capita",
+            position = "bottomright", 
+            title = "Open Space Square Feet Per Capita<br> by Zip Code") 
+map_sqft
