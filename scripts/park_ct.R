@@ -159,7 +159,7 @@ iso@data$parkid <- ifelse(!is.na(iso@data$park_name), as.character(iso@data$park
                      ifelse(!is.na(iso@data$parknum), as.character(iso@data$parknum), 
                             as.character(iso@data$parkname)))
 # Drop rows with squareft NA's 
-iso@data <- subset(iso@data, !is.na(squareft))
+# iso <- subset(iso, !is.na(squareft))
 
 ########################################################################
 
@@ -167,7 +167,7 @@ iso@data <- subset(iso@data, !is.na(squareft))
 ct_walk <- ct_demo
 
 # Create list of non-NA park ID's
-parknames <- unique(as.character(subset(iso, !is.na(iso@data$parkid))$parkid))
+parknames <- unique(as.character(subset(iso, !is.na(squareft))$parkid))
 
 # Create column for each park 
 ct_walk[, parknames] <- 0 
@@ -177,7 +177,7 @@ for (i in parknames){
   temp_cens <- ct_demo[0,]
   # Collect the access points for each park
   for (j in rownames(iso@data[which(iso@data$parkid==i),])){
-    # Note: Rows diff by 1
+    # Note: Slot "ID" diff by 1
     temp_sp <- SpatialPolygons(list(iso@polygons[[as.numeric(j)+1]])) 
     # Make same crs
     crs(temp_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0") 
@@ -327,9 +327,9 @@ pop_boro
 ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
-    title = "Park Equity: Zip Code Square Feet Per Capita and COVID19 Case Rate",
+    title = "Park Equity: Zip Code Open Space Access and COVID19 Case Rate By Borough",
     x = "Least to Most Square Feet Per Capita (Rank)",
-    y = "COVID19 Case Rate", 
+    y = "COVID19 Case Rate (Per 100,000)", 
     color = "Borough", 
     caption = expression(paste(italic("Source: NYC Health; NYC Parks: Walk-to-a-Park Service Area")))
   ) +
@@ -347,9 +347,9 @@ ggplot(mzcta, aes(x=rank(sqftpc), y=COVID_CASE_RATE, color=BOROUGH_GROUP)) +
 ggplot(mzcta, aes(x=rank(sqftpc), y=MedInc, color=BOROUGH_GROUP)) + 
   geom_point() + 
   labs(
-    title = "Park Equity: Zip Code Square Feet Per Capita and Median Income",
+    title = "Park Equity: Zip Code Open Space Access and Median Income By Borough",
     x = "Least to Most Square Feet Per Capita (Rank)",
-    y = "Median Income", 
+    y = "Median Income ($)", 
     color = "Borough", 
     caption = expression(paste(italic("Source: 2018 ACS 5-Year Estimates; NYC Parks: Walk-to-a-Park Service Area")))
   ) +
@@ -479,7 +479,7 @@ map
 # Map square footage and square footage per capita data at census tract level with PUMA overlay
 
 # Import open space shapfile from park_universe.R
-openspace <- readOGR("data/openspace_parks_dissolve.geojson")
+openspace <- readOGR("data/parks_with_sf_matched.geojson")
 # Import PUMA shapefile
 puma <- readOGR("data/Public Use Microdata Areas (PUMA).geojson")
 
@@ -609,7 +609,7 @@ map_compare <- leaflet() %>%
   hideGroup("Square feet per capita") 
 map_compare
 
-saveWidget(map_compare, file = "map_compare.html")
+#saveWidget(map_compare, file = "map_compare.html")
 
 map_covid <- leaflet() %>%
   setView(-73.935242,40.730610,10) %>%
@@ -659,5 +659,18 @@ map_sqft <- leaflet() %>%
   addLegend(pal = pal_sqftpc_m, values = mzcta$sqftpc,
             group = "Square feet per capita",
             position = "bottomright", 
-            title = "Open Space Square Feet Per Capita<br> by Zip Code") 
+            title = "Open Space Access<br>(Sq. Ft. Per Capita)<br> by Zip Code") 
 map_sqft
+
+### Walking Distance Example
+
+map_iso <- leaflet() %>%
+  setView(-73.935242,40.730610,10) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data=subset(iso, parkname=="Silver Lake Park")[1,], weight=0.1) %>%
+  addCircles(data=subset(ct_demo, boro_ct201=="5007500")$center,
+             group= "Center") %>%
+  addCircles(data=subset(access, parkname=="Silver Lake Park")[1,],
+             group= "Access",
+             color="red")
+map_iso
