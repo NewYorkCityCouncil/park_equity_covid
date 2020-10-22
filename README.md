@@ -40,7 +40,8 @@ If a census tract is designated as having access to a park, then it is assigned 
 #### Zip Code Aggregation
 To compare the COVID-19 data to our open space access data, we aggregate the census tracts up to the MODZCTA level. Census tract data is first aggregated to ZCTA5 level using the [Census crosswalk relationship file](https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_tract_rel_10.txt) and doing a population-weighted assignment of square footage. Refer to the [technical document](https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_3) for more information.  
 
-The data is then aggreagted to MODZCTA level using the [NYC DOHMH files](https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources). The MODZCTA square feet value is a population-weighted average of each nested ZCTA value. 
+The data is then aggregated to the MODZCTA level using the [NYC DOHMH files](https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources). The MODZCTA square feet value is a population-weighted average of each nested ZCTA value. 
+
 
 
 
