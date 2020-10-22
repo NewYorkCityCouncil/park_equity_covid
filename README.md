@@ -8,6 +8,8 @@ Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity o
 - [Parks Properties](https://data.cityofnewyork.us/Recreation/Parks-Properties/enfh-gkve)
 - [Waterfront Access Map: Publicly Owned Waterfront](https://data.cityofnewyork.us/City-Government/Waterfront-Access-Map-Data-Shapefile/388s-pnvc)
 - [2010 Census Tracts](https://data.cityofnewyork.us/City-Government/2010-Census-Tracts/fxpq-c8ku)
+- [2010 ZCTA to Census Tract Relationship File](https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_tract_rel_10.txt)
+- [NYC DOHMH Geographic Resources](https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources)
 - 2018 5-Year ACS Survey: *We used R package censusapi to get demographic data
   - [Income](https://data.census.gov/cedsci/table?q=income%20census%20tracts%20nyc&g=0500000US36005.140000,36047.140000,36061.140000,36081.140000,36085.140000&tid=ACSST5Y2018.S1901&hidePreview=true)
   - [Population](https://data.census.gov/cedsci/table?q=population%20census%20tracts%20nyc&g=0500000US36005.140000,36047.140000,36061.140000,36081.140000,36085.140000&tid=ACSDP5Y2018.DP05&hidePreview=true)
