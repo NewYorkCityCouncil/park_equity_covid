@@ -119,7 +119,7 @@ st_write(park_universe_final, "data/openspace_parks_dissolve.geojson",
 access <- st_read("data/Walk-to-a-Park Service area/geo_export_077c476d-cadb-41e8-a36d-b5994d952f89.shp") %>%
   st_transform("+proj=longlat +datum=WGS84")
 
-# waterfront properties ---------- have sf already
+# waterfront properties ---------- has square footage already
 wf <- st_read("data/Waterfront/geo_export_3a9b8ad8-00be-4d92-ad09-16ab27adcb34.shp") %>%
   st_transform("+proj=longlat +datum=WGS84") %>% 
   filter(status=="Open") %>% 
@@ -151,7 +151,7 @@ st_write(parks_universe_final_wf,"data/parks_with_sf_matched.geojson",
         driver='GeoJSON', delete_dsn=TRUE)
      
 
-############3
+############
 sf2<- st_join(access[which(is.na(tt1$squareft)==T),], 
               park_universe_final, join = st_nn, maxdist = 15.24)
 names(sf2) <- names(tt1)
@@ -183,13 +183,13 @@ tt1[which(is.na(tt1$squareft)==T),] <-sf3
 st_write(tt1, "data/sf_access.geojson",
          driver='GeoJSON', delete_dsn=TRUE) 
    
-# pluto res ------
+# pluto res ------ future work, time from every residence to nearest park
 #pluto <- st_read("data/pluto_res_columns.geojson") %>% 
 #  filter(unitsres>0)
 
 #st_write(pluto, "data/pluto_res_only.geojson")
 
-
+# checks
 tt1$uid<- paste(tt1$gispropnum, tt1$parkname, tt1$parknum, tt1$park_name, sep = " ")
 
 tt2 <- tt1[!duplicated(tt1$uid),]
