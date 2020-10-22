@@ -30,8 +30,17 @@ Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity o
 From the [Open Space (Parks)](https://data.cityofnewyork.us/Recreation/Open-Space-Parks-/g84h-jbjm), [Parks Properties](https://data.cityofnewyork.us/Recreation/Parks-Properties/enfh-gkve) and [Waterfront Access Map](https://data.cityofnewyork.us/City-Government/Waterfront-Access-Map-Data-Shapefile/388s-pnvc) datasets, features that were within 50 ft of an access point from the [Walk-to-a-Park Service Area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv) were included as the set of parks, open space and recreation areas for analysis. This excludes cemeteries. For more information on what parks were included in NYC Parks **Walk-to-a-Park Service Area** dataset, please view their [data dictionary](https://data.cityofnewyork.us/api/views/5vb5-y6cv/files/d1a297b8-4819-4bb4-93e8-a59293779abb?download=true&filename=Walk-to-a-park_DataDictionary_20170901.xlsx). 
 
 #### 10 Minute Walking Distance
-Using the access points from Walk-to-a-Park Service Area dataset, we created isochrone polygons or time-distance areas for each point. We used mapbox api for this process and selected a 10 minute walking distance parameter. The walking distance is set from the center of each census tract to the access point of each park. If the center of a census tract is within 10-minutes walking of any access point associated with a given park, it is designated as having access to that park. 
+Using the access points from Walk-to-a-Park Service Area dataset, we created isochrone polygons or time-distance areas for each point. We used mapbox api for this process and selected a 10 minute walking distance parameter. If the center of a census tract is within 10-minutes walking of any access point associated with a given park, then it is designated as having access to that park. 
 
-#### Census Tract
+#### Square Feet Per Capita
+If a census tract is designated as having access to a park, then the square footage of that park is assigned to that census tract. The total amount of square footage of all the parks a census tract has access to is summed. The total amount of square footage is then divided by the population of that census tract to get square feet per capita. For larger parks, we do not assign the full square footage of the park to a census tract. The maximum amount assigned from a park was capped at 7,000,000 square feet. This number is roughly equivalent to 0.25 square miles and is 3 standard deviations above the average square footage of all the parks in NYC. 
 
-#### Zip Code
+#### Zip Code Aggregation
+To compare the COVID-19 data to our open space access data, we needed to aggregate the census tracts up to the MODZCTA level. Census tract data is first aggregated to ZCTA5 level using the [Census crosswalk relationship file] (https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_tract_rel_10.txt) and doing a population-weighted assignment of square footage. The technical document is found at: https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_3.  
+
+The data is then aggreagted to MODZCTA level using the [NYC DOHMH files] (https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources). The MODZCTA square feet value is a population-weighted average of each nested ZCTA value. 
+
+
+
+
+
