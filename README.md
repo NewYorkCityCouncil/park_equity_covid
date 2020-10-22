@@ -1,6 +1,7 @@
 ## Park Equity  
 Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity of Green Space throughout the City in Light of the COVID Epidemic'](https://legistar.council.nyc.gov/MeetingDetail.aspx?ID=806382&GUID=9E623EFF-9EC5-499E-B681-95FF4CAB9A08&Options=info|&Search=) hearing.
 
+***  
 
 ### Data Sources 
 - [Walk-to-a-Park Service Area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv)
@@ -43,7 +44,9 @@ To compare the COVID-19 data to our open space access data, we aggregate the cen
 The data is then aggregated to the MODZCTA level using the [NYC DOHMH files](https://github.com/nychealth/coronavirus-data/tree/master/Geography-resources). The MODZCTA square feet value is a population-weighted average of each nested ZCTA value. 
 
 
+### Scripts
 
-
+#### park_ct.R
+This script determines which open space access points are within 10 minutes walking from each census tract, assigns square footage per capita, and aggregates the data up to the zip code level. It is also used to plot and map COVID-19 case rate, income, and access data at the MODZCTA level. This script imports data from the other scripts, noted in the comments of the code. 
 
 
