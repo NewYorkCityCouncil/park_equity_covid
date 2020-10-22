@@ -21,4 +21,7 @@ Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity o
 
 ### Methodology 
 
-#### FIll
+#### Parks & Open Spaces included in Analysis
+From the [Open Space (Parks)](https://data.cityofnewyork.us/Recreation/Open-Space-Parks-/g84h-jbjm), [Parks Properties](https://data.cityofnewyork.us/Recreation/Parks-Properties/enfh-gkve) and [Waterfront Access Map](https://data.cityofnewyork.us/City-Government/Waterfront-Access-Map-Data-Shapefile/388s-pnvc) datasets, features that were within 50 ft of an access point from the [Walk-to-a-Park Service Area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv) were included as the set of parks, open space and recreation areas for analysis. This excludes cemeteries. For more information on what parks were included in NYC Parks **Walk-to-a-Park Service Area** dataset, please view their [data dictionary](https://data.cityofnewyork.us/api/views/5vb5-y6cv/files/d1a297b8-4819-4bb4-93e8-a59293779abb?download=true&filename=Walk-to-a-park_DataDictionary_20170901.xlsx). 
+
+#### 10 Minute Walking Distance
