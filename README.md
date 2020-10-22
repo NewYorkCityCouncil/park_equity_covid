@@ -2,7 +2,8 @@
 Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity of Green Space throughout the City in Light of the COVID Epidemic'](https://legistar.council.nyc.gov/MeetingDetail.aspx?ID=806382&GUID=9E623EFF-9EC5-499E-B681-95FF4CAB9A08&Options=info|&Search=) hearing.
 
 
-## Data Sources 
+### Data Sources 
+- [Walk-to-a-Park Service Area](https://data.cityofnewyork.us/Recreation/Walk-to-a-Park-Service-area/5vb5-y6cv)
 - [Open Space (Parks)](https://data.cityofnewyork.us/Recreation/Open-Space-Parks-/g84h-jbjm)
 - [Parks Properties](https://data.cityofnewyork.us/Recreation/Parks-Properties/enfh-gkve)
 - [Waterfront Access Map: Publicly Owned Waterfront](https://data.cityofnewyork.us/City-Government/Waterfront-Access-Map-Data-Shapefile/388s-pnvc)
@@ -18,6 +19,6 @@ Data analysis and visuals for NYCC 10.22.20 ['Oversight - Improving the Equity o
   - [Playgrounds](https://data.cityofnewyork.us/dataset/Parks-Closure-Status-Due-to-COVID-19-Playgrounds/a4qt-mpr5)
 
 
-## Methodology 
+### Methodology 
 
-### FIll
+#### FIll
